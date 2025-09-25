@@ -1,0 +1,11 @@
+{
+  "rankings:ROS_week_2_PFF_rankings.csv": "30f209c2b42a8d68ccc8d77f1980ff95619fc5b7f4d762c1dc7dafa4fd546593",
+  "rankings:PFF_rankings.csv": "d17a9ba74cdbd37f313fedeed30effe005ed8c96d0d76ad6641d87df6c38c038",
+  "projections:projections.csv": "5cc5d257278912d18b03cb7e791e5fa7702c6e0f9ee141b1f5c0add59b4bc2c7",
+  "sos:rb-fantasy-sos.csv": "f8f386bbbf6301ddd7a35edcaca75c92235643c1a8596389025dfcc37b34ec74",
+  "sos:qb-fantasy-sos.csv": "15128ea443dec0606d6d4579bc6db97384963534b01959099b27a11abc23e067",
+  "sos:te-fantasy-sos.csv": "0ec2b60e6fdc152fc3245ef7de6c3b1cf21fd215e48ad6339460635a25fd52c1",
+  "sos:wr-fantasy-sos.csv": "86691d403b501afef930cec4f69e194efeeb67df535d3f9ad2a2c718850151d4",
+  "stats:fantasy-stats-passing.csv": "9c7fe9a3915fc37ee990665d9f5f1b041210228233691b03561a7fbb42d42ca9",
+  "stats:fantasy-stats-receiving:rushing.csv": "e82e40d89c2bd1aeb899e2679a31b8c35defd6bae37c6a90b9dc3242f91b9cbc"
+}
