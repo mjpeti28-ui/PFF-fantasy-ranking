@@ -260,3 +260,63 @@ class TradeFindResponse(BaseModel):
     evaluated_at: datetime = Field(..., alias="evaluatedAt")
     baseline_combined: Dict[str, float] = Field(..., alias="baselineCombined")
     proposals: List[TradeProposal]
+
+
+class WaiverCandidate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str
+    position: Optional[str] = None
+    team: Optional[str] = None
+    rank: Optional[int] = None
+    pos_rank: Optional[int] = Field(default=None, alias="posRank")
+    proj_points: Optional[float] = Field(default=None, alias="projPoints")
+    vor: Optional[float] = None
+    bench_score: Optional[float] = Field(default=None, alias="benchScore")
+    ovar: Optional[float] = Field(default=None, alias="oVAR")
+
+
+class WaiverListResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: List[WaiverCandidate]
+    total: int
+    limit: int
+    offset: int
+    position_filter: Optional[str] = Field(default=None, alias="positionFilter")
+    team_filter: Optional[str] = Field(default=None, alias="teamFilter")
+
+
+class WaiverChange(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team: str
+    adds: List[str] = Field(default_factory=list)
+    drops: List[str] = Field(default_factory=list)
+
+
+class WaiverRecommendRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    changes: List[WaiverChange]
+    include_details: bool = Field(default=True, alias="includeDetails")
+    bench_limit: Optional[int] = Field(default=None, alias="benchLimit")
+
+
+class WaiverTeamResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team: str
+    baseline: float
+    post_change: float = Field(..., alias="postChange")
+    delta: float
+
+
+class WaiverRecommendResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    evaluated_at: datetime = Field(..., alias="evaluatedAt")
+    teams: List[WaiverTeamResult]
+    combined_scores: Dict[str, float] = Field(..., alias="combinedScores")
+    leaderboards: Dict[str, List[LeaderboardEntry]]
+    details: Optional[List[TeamDetail]] = None

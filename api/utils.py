@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-from api.models import BenchDetail, LeaderboardEntry, StarterDetail, TeamDetail
+from api.models import (
+    BenchDetail,
+    LeaderboardEntry,
+    StarterDetail,
+    TeamDetail,
+    WaiverCandidate,
+)
 
 
 def coerce_float(value) -> float:
@@ -74,3 +80,24 @@ def build_leaderboards_map(raw_lb: Dict[str, List]) -> Dict[str, List[Leaderboar
     for name, entries in raw_lb.items():
         leaderboards[name] = [LeaderboardEntry(team=str(team), value=coerce_float(val)) for team, val in entries]
     return leaderboards
+
+
+def build_waiver_candidates(
+    players: Iterable[dict],
+) -> List[WaiverCandidate]:
+    candidates: List[WaiverCandidate] = []
+    for row in players:
+        candidates.append(
+            WaiverCandidate(
+                name=str(row.get("Name")),
+                position=row.get("Position"),
+                team=row.get("Team"),
+                rank=int(row.get("Rank")) if row.get("Rank") is not None else None,
+                pos_rank=int(row.get("PosRank")) if row.get("PosRank") is not None else None,
+                proj_points=row.get("ProjPoints"),
+                vor=row.get("vor"),
+                ovar=row.get("oVAR"),
+                bench_score=row.get("BenchScore"),
+            )
+        )
+    return candidates

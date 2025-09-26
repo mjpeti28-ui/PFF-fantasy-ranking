@@ -78,6 +78,22 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - **Add/Drop Impact**: Mutate a single team's roster and instantly recompute league standings and bench depth.
 - **Trade Analyzer**: Manually select players from two teams and simulate post-trade combined scores and EPW trajectories.
 
+## REST API Endpoints
+The FastAPI layer (`api/`) currently exposes:
+- `GET /healthz` – basic health check.
+- `GET /config`, `PATCH /config` – inspect and tweak runtime knobs.
+- `GET /league`, `POST /league/reload` – metadata and data refresh.
+- `GET /players`, `GET /players/{player_id}` – search or inspect individual players.
+- `GET /rankings` – top-N lists by any metric.
+- `POST /evaluate` – run the full league evaluation (optionally returning starter/bench details).
+- `GET /teams`, `GET /teams/{team}` – list teams and inspect starters/bench makeup.
+- `POST /trade/evaluate` – score a specific trade proposal.
+- `POST /trade/find` – search for favorable packages between two teams.
+- `GET /waivers/candidates` – list free-agent targets with projection/VOR heuristics.
+- `POST /waivers/recommend` – evaluate add/drop scenarios and show team deltas.
+
+Spin up the server with `uvicorn api.main:app --reload --reload-exclude '.venv/*'` and explore the interactive docs at `http://127.0.0.1:8000/docs`.
+
 ## Key Heuristic Reference
 | Lever | Location | Effect |
 | ----- | -------- | ------ |
@@ -127,6 +143,6 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - When altering projections or rankings, confirm `history/manifest.json` updates (indicating a new snapshot was archived).
 - Use the Streamlit "Simulation Playground" to sanity-check the sensitivity of combined scores to new heuristics before shipping them.
 - For trade logic changes, re-run the Streamlit Trade Finder against known scenarios and verify acceptance scores and narratives are aligned with expectations.
-- Run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, and `/trade/evaluate` without requiring a live Uvicorn server.
+- Install dev dependencies with `pip install -r requirements-dev.txt`, then run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, `/trade/evaluate`, `/trade/find`, and `/waivers/candidates` without requiring a live Uvicorn server.
 
 Happy roster tinkering!

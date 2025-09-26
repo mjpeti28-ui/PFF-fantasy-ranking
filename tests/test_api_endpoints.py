@@ -91,3 +91,57 @@ def test_trade_find_endpoint(client: TestClient) -> None:
     data = resp.json()
     assert "proposals" in data
     assert isinstance(data["proposals"], list)
+
+
+def test_teams_endpoints(client: TestClient) -> None:
+    list_resp = client.get("/teams")
+    assert list_resp.status_code == 200
+    teams = list_resp.json()
+    assert isinstance(teams, list)
+    assert teams
+    team_name = teams[0]
+
+    detail_resp = client.get(f"/teams/{team_name}")
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["team"] == team_name
+    assert "starters" in detail
+
+
+def test_waivers_candidates_endpoint(client: TestClient) -> None:
+    resp = client.get("/waivers/candidates", params={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["limit"] == 5
+    assert "items" in data
+    assert isinstance(data["items"], list)
+    if data["items"]:
+        sample = data["items"][0]
+        assert "name" in sample
+
+
+def test_waivers_recommend_endpoint(client: TestClient) -> None:
+    candidates = client.get("/waivers/candidates", params={"limit": 1}).json()
+    assert candidates["items"]
+    add_name = candidates["items"][0]["name"]
+
+    team_name = client.get("/teams").json()[0]
+    team_detail = client.get(f"/teams/{team_name}").json()
+    drop_name = team_detail["bench"][0]["name"] if team_detail["bench"] else team_detail["starters"][0]["name"]
+
+    payload = {
+        "changes": [
+            {
+                "team": team_name,
+                "adds": [add_name],
+                "drops": [drop_name],
+            }
+        ],
+        "benchLimit": 1,
+        "includeDetails": True,
+    }
+    resp = client.post("/waivers/recommend", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "teams" in data
+    assert data["teams"]
