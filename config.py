@@ -68,6 +68,16 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "bench_percentile_clamp": 0.05,
 }
 
+SETTINGS_HELP: Dict[str, str] = {
+    "fuzzy_cutoff": "Minimum similarity required when matching roster names to ranking entries (higher = stricter).",
+    "bench_ovar_beta": "Weight applied to overall rank advantage (oVAR) when scoring bench players.",
+    "combined_starters_weight": "Proportion of the combined score attributed to starter strength.",
+    "combined_bench_weight": "Proportion of the combined score attributed to bench depth.",
+    "projection_scale_beta": "Influence of projection z-scores when rescaling raw rankings.",
+    "bench_z_fallback_threshold": "If bench-score variance drops below this threshold, percentile z-scores are used instead of standard z-scores.",
+    "bench_percentile_clamp": "Clamp applied to percentile-based z-scores to limit outlier influence.",
+}
+
 settings = SettingsManager(_DEFAULT_SETTINGS)
 
 

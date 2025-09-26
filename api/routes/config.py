@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.dependencies import require_api_key
 from api.models import ConfigResponse, ConfigUpdateRequest
-from config import settings
+from config import SETTINGS_HELP, settings
 
 router = APIRouter(prefix="/config", tags=["config"], dependencies=[Depends(require_api_key)])
 
@@ -24,3 +24,8 @@ async def patch_config(payload: ConfigUpdateRequest) -> ConfigResponse:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown knob '{name}'")
         settings.set(name, value)
     return ConfigResponse(knobs=settings.snapshot())
+
+
+@router.get("/help", summary="Describe available configuration knobs")
+async def config_help() -> dict[str, str]:
+    return SETTINGS_HELP.copy()

@@ -9,10 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConfigResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     knobs: Dict[str, Any]
 
 
 class ConfigUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     updates: Dict[str, Any] = Field(default_factory=dict)
 
 

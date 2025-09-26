@@ -147,6 +147,14 @@ def test_waivers_recommend_endpoint(client: TestClient) -> None:
     assert data["teams"]
 
 
+def test_top_players_endpoint(client: TestClient) -> None:
+    resp = client.get("/top/players", params={"pos": "WR", "metric": "proj", "limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert len(data["items"]) <= 5
+
+
 def test_stats_endpoint(client: TestClient) -> None:
     resp = client.get("/stats/passing", params={"limit": 5, "sort": "-fantasyPts"})
     assert resp.status_code == 200

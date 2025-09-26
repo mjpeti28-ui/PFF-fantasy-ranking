@@ -10,6 +10,7 @@ from . import (  # noqa: F401
     sources,
     stats,
     teams,
+    top,
     trade,
     waivers,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "sources",
     "stats",
     "teams",
+    "top",
     "trade",
     "waivers",
 ]
