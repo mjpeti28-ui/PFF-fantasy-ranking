@@ -127,5 +127,6 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - When altering projections or rankings, confirm `history/manifest.json` updates (indicating a new snapshot was archived).
 - Use the Streamlit "Simulation Playground" to sanity-check the sensitivity of combined scores to new heuristics before shipping them.
 - For trade logic changes, re-run the Streamlit Trade Finder against known scenarios and verify acceptance scores and narratives are aligned with expectations.
+- Run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, and `/trade/evaluate` without requiring a live Uvicorn server.
 
 Happy roster tinkering!
