@@ -13,6 +13,7 @@ from api.models import (
     WaiverTeamResult,
 )
 from api.utils import build_leaderboards_map, build_team_details, build_waiver_candidates, coerce_float
+from config import settings
 from context import ContextManager
 from data import normalize_name
 from main import evaluate_league
@@ -52,6 +53,45 @@ async def waiver_candidates(
         available = available[available["Position"].str.upper() == position.upper()]
 
     replacement_points = league.get("replacement_points", {})
+    bench_beta = settings.get("bench_ovar_beta")
+    max_rank = float(df["Rank"].max()) if "Rank" in df.columns else None
+
+    league_results = league.get("results", {})
+    position_totals: dict[str, list[float]] = {}
+    team_position_vor: dict[str, dict[str, float]] = {}
+    for tm, res in league_results.items():
+        starters = res.get("starters", [])
+        team_map = team_position_vor.setdefault(tm, {})
+        for starter in starters:
+            pos = starter.get("pos")
+            if not pos:
+                continue
+            vor_val = starter.get("vor")
+            if vor_val is None:
+                proj = starter.get("proj")
+                repl = replacement_points.get(pos, 0.0)
+                vor_val = (proj - repl) if proj is not None else 0.0
+            position_totals.setdefault(pos, []).append(float(vor_val))
+            team_map[pos] = team_map.get(pos, 0.0) + float(vor_val)
+
+    position_avg = {
+        pos: (sum(vals) / len(vals) if vals else 0.0)
+        for pos, vals in position_totals.items()
+    }
+
+    def compute_need_factor(pos: str) -> float:
+        if not team or not pos:
+            return 1.0
+        league_avg = position_avg.get(pos)
+        if league_avg is None:
+            return 1.0
+        team_map = team_position_vor.get(team, {})
+        team_val = team_map.get(pos, 0.0)
+        deficit = league_avg - team_val
+        if deficit <= 0:
+            return 1.0
+        boost = deficit / (abs(league_avg) + 1e-6)
+        return round(1.0 + min(0.5, boost), 3)
 
     def compute_metrics(row):
         pos = row.get("Position")
@@ -60,29 +100,38 @@ async def waiver_candidates(
             proj = None
         repl = replacement_points.get(pos, 0.0)
         vor = proj - repl if proj is not None else None
+        rank_val = row.get("Rank")
         ovar = None
+        if max_rank is not None and isinstance(rank_val, (int, float)) and not math.isnan(rank_val):
+            ovar = max(0.0, float(max_rank) - float(rank_val) + 1)
         bench_score = None
         if vor is not None:
             vor = round(vor, 2)
-            bench_score = round(max(vor, 0.0), 2)
+            bench_score = round(max(vor, 0.0) + bench_beta * (ovar or 0.0), 2)
         return vor, bench_score, ovar
 
     rows = []
     for _, row in available.iterrows():
         vor, bench_score, ovar = compute_metrics(row)
-        rows.append({**row.to_dict(), "vor": vor, "BenchScore": bench_score, "oVAR": ovar})
-
-    if team:
-        # Simple positional need boost: prioritize positions with lower Starter VOR
-        team_vor = league["starters_totals"].get(team)
-        # Currently unused but placeholder for future weighting
-        _ = team_vor
+        need_factor = compute_need_factor(row.get("Position"))
+        need_score = (bench_score or 0.0) * need_factor
+        rows.append(
+            {
+                **row.to_dict(),
+                "vor": vor,
+                "BenchScore": bench_score,
+                "oVAR": ovar,
+                "needFactor": need_factor if team else None,
+                "needScore": need_score,
+            }
+        )
 
     rows_sorted = sorted(
         rows,
         key=lambda r: (
+            coerce_float(r.get("needScore")),
+            coerce_float(r.get("BenchScore")),
             coerce_float(r.get("vor")),
-            coerce_float(r.get("ProjPoints")),
         ),
         reverse=True,
     )
@@ -149,6 +198,11 @@ async def waiver_recommend(
         team_name = change.team
         if team_name not in mutated:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown team '{team_name}'")
+        if len(change.adds) != len(change.drops):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Adds and drops must be balanced for {team_name}",
+            )
         affected_teams.add(team_name)
         for drop in change.drops:
             remove_player(team_name, drop)

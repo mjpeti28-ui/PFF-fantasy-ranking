@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
+
+import pandas as pd
 
 from api.models import (
     BenchDetail,
@@ -98,6 +100,104 @@ def build_waiver_candidates(
                 vor=row.get("vor"),
                 ovar=row.get("oVAR"),
                 bench_score=row.get("BenchScore"),
+                need_factor=row.get("needFactor"),
             )
         )
     return candidates
+
+
+# DataFrame query helpers -------------------------------------------------
+
+VALID_FILTER_OPS = {"eq", "ne", "gt", "gte", "lt", "lte", "contains"}
+
+
+def _coerce_value(value: str):
+    try:
+        if value.lower() in {"true", "false"}:
+            return value.lower() == "true"
+        return float(value)
+    except ValueError:
+        return value
+
+
+def apply_dataframe_query(
+    df: pd.DataFrame,
+    *,
+    filters: List[str] | None = None,
+    sort: str | None = None,
+    columns: List[str] | None = None,
+    limit: int,
+    offset: int,
+) -> tuple[pd.DataFrame, int]:
+    working = df.copy()
+
+    if filters:
+        for item in filters:
+            try:
+                column, op, value = item.split(":", 2)
+            except ValueError:
+                raise ValueError(f"Invalid filter '{item}'. Expected format column:op:value")
+            column = column.strip()
+            op = op.strip().lower()
+            if op not in VALID_FILTER_OPS:
+                raise ValueError(f"Unsupported operator '{op}'")
+            if column not in working.columns:
+                raise ValueError(f"Unknown column '{column}'")
+            series = working[column]
+            comp_value = _coerce_value(value.strip())
+
+            if op == "contains":
+                mask = series.astype(str).str.contains(str(comp_value), case=False, na=False)
+            else:
+                if pd.api.types.is_numeric_dtype(series):
+                    comp_value = float(comp_value)
+                if op == "eq":
+                    mask = series == comp_value
+                elif op == "ne":
+                    mask = series != comp_value
+                elif op == "gt":
+                    mask = series > comp_value
+                elif op == "gte":
+                    mask = series >= comp_value
+                elif op == "lt":
+                    mask = series < comp_value
+                elif op == "lte":
+                    mask = series <= comp_value
+                else:
+                    raise ValueError(f"Unsupported operator '{op}'")
+            working = working[mask]
+
+    total = len(working)
+
+    if sort:
+        sort_fields = []
+        ascending = []
+        for field in sort.split(","):
+            field = field.strip()
+            if not field:
+                continue
+            direction = True
+            if field.startswith("-"):
+                direction = False
+                field = field[1:]
+            if field not in working.columns:
+                raise ValueError(f"Unknown sort column '{field}'")
+            sort_fields.append(field)
+            ascending.append(direction)
+        if sort_fields:
+            working = working.sort_values(sort_fields, ascending=ascending, na_position="last")
+
+    if columns:
+        cols_present = [col for col in columns if col in working.columns]
+        if cols_present:
+            working = working[cols_present]
+
+    window = working.iloc[offset : offset + limit]
+    window = window.replace({pd.NA: None}).where(pd.notnull(window), None)
+    return window, total
+
+
+def dataframe_to_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    if df.empty:
+        return []
+    return df.to_dict(orient="records")

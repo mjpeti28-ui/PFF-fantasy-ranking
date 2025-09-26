@@ -145,3 +145,18 @@ def test_waivers_recommend_endpoint(client: TestClient) -> None:
     data = resp.json()
     assert "teams" in data
     assert data["teams"]
+
+
+def test_stats_endpoint(client: TestClient) -> None:
+    resp = client.get("/stats/passing", params={"limit": 5, "sort": "-fantasyPts"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["limit"] == 5
+    assert isinstance(data["items"], list)
+
+
+def test_sources_projections_endpoint(client: TestClient) -> None:
+    resp = client.get("/sources/projections", params={"limit": 5})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["limit"] == 5

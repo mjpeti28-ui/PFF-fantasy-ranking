@@ -13,8 +13,11 @@ import pandas as pd
 
 from alias import build_alias_map
 from config import PROJECTIONS_CSV, settings
-from data import build_lookups, load_rankings, load_rosters
+from data import build_lookups, load_rankings, load_projections, load_rosters
 from optimizer import flatten_league_names
+
+STATS_DIR = Path("Stats")
+SOS_DIR = Path("StrengthOfSchedule")
 
 
 DEFAULT_RANKINGS_PATH = Path(__file__).with_name("ROS_week_2_PFF_rankings.csv")
@@ -38,6 +41,9 @@ class LeagueDataContext:
     projections_path: Optional[Path]
     supplemental_path: Optional[Path]
     settings_snapshot: Dict[str, Any]
+    projections_df: pd.DataFrame
+    stats_data: Dict[str, pd.DataFrame]
+    sos_data: Dict[str, pd.DataFrame]
 
 
 def build_context(
@@ -71,6 +77,13 @@ def build_context(
     league_names = flatten_league_names(rosters)
     alias_map = build_alias_map(league_names, df)
 
+    projections_df = (
+        load_projections(str(projections_path)) if projections_path else load_projections()
+    )
+
+    stats_data = _load_stats_data()
+    sos_data = _load_sos_data()
+
     snapshot = LeagueDataContext(
         dataframe=df,
         rank_by_name=rank_by_name,
@@ -85,6 +98,9 @@ def build_context(
         projections_path=projections_path,
         supplemental_path=supplemental_path,
         settings_snapshot=settings.snapshot(),
+        projections_df=projections_df,
+        stats_data=stats_data,
+        sos_data=sos_data,
     )
     return snapshot
 
@@ -162,10 +178,34 @@ class ContextManager:
             "supplemental_path": str(ctx.supplemental_path) if ctx.supplemental_path else None,
             "settings": ctx.settings_snapshot,
             "team_count": len(ctx.rosters),
-            "player_count": int(ctx.dataframe.shape[0]),
-        }
+        "player_count": int(ctx.dataframe.shape[0]),
+    }
 
+
+# Helper loaders ---------------------------------------------------------
+
+def _load_stats_data() -> Dict[str, pd.DataFrame]:
+    stats: Dict[str, pd.DataFrame] = {}
+    if STATS_DIR.exists():
+        for path in STATS_DIR.glob("*.csv"):
+            key = path.stem.replace("fantasy-stats-", "").replace(":", "_").lower()
+            try:
+                stats[key] = pd.read_csv(path)
+            except Exception:
+                stats[key] = pd.DataFrame()
+    return stats
+
+
+def _load_sos_data() -> Dict[str, pd.DataFrame]:
+    sos: Dict[str, pd.DataFrame] = {}
+    if SOS_DIR.exists():
+        for path in SOS_DIR.glob("*-fantasy-sos.csv"):
+            key = path.stem.split("-", 1)[0]
+            try:
+                sos[key.upper()] = pd.read_csv(path)
+            except Exception:
+                sos[key.upper()] = pd.DataFrame()
+    return sos
 
 # Global singleton used by the CLI/API layers.
 context_manager = ContextManager()
-

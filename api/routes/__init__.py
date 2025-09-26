@@ -1,5 +1,29 @@
 """Route registration helpers."""
 
-from . import config, evaluate, health, league, players, rankings, teams, trade, waivers  # noqa: F401
+from . import (  # noqa: F401
+    config,
+    evaluate,
+    health,
+    league,
+    players,
+    rankings,
+    sources,
+    stats,
+    teams,
+    trade,
+    waivers,
+)
 
-__all__ = ["config", "evaluate", "health", "league", "players", "rankings", "teams", "trade", "waivers"]
+__all__ = [
+    "config",
+    "evaluate",
+    "health",
+    "league",
+    "players",
+    "rankings",
+    "sources",
+    "stats",
+    "teams",
+    "trade",
+    "waivers",
+]

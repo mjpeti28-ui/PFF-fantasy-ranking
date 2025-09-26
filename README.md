@@ -87,12 +87,16 @@ The FastAPI layer (`api/`) currently exposes:
 - `GET /rankings` – top-N lists by any metric.
 - `POST /evaluate` – run the full league evaluation (optionally returning starter/bench details).
 - `GET /teams`, `GET /teams/{team}` – list teams and inspect starters/bench makeup.
+- `GET /stats/{dataset}` – query raw stat tables (`passing`, `receiving_rushing`, etc.) with flexible filters/sorts.
+- `GET /sources/projections`, `GET /sources/rankings` – access upstream CSV feeds with arbitrary filtering/sorting.
 - `POST /trade/evaluate` – score a specific trade proposal.
 - `POST /trade/find` – search for favorable packages between two teams.
 - `GET /waivers/candidates` – list free-agent targets with projection/VOR heuristics.
 - `POST /waivers/recommend` – evaluate add/drop scenarios and show team deltas.
 
 Spin up the server with `uvicorn api.main:app --reload --reload-exclude '.venv/*'` and explore the interactive docs at `http://127.0.0.1:8000/docs`.
+
+`/stats/{dataset}` (datasets currently include `passing` and `receiving_rushing`) and `/sources/*` support rich queries using repeated `filter=column:op:value` parameters (`op` ∈ {`eq`,`ne`,`gt`,`gte`,`lt`,`lte`,`contains`}), comma-separated `sort` fields (prefix with `-` for descending), and `columns` to select a subset of fields.
 
 ## Key Heuristic Reference
 | Lever | Location | Effect |

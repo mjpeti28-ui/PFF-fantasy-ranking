@@ -54,3 +54,9 @@ curl_json -X POST "${BASE_URL}/trade/evaluate" \
   -H "Content-Type: application/json" \
   -d @/tmp/trade-payload.json \
   | jq '{evaluatedAt, teams, details}'
+
+echo "== /stats/passing (top fantasyPts) =="
+curl_json "${BASE_URL}/stats/passing?limit=5&sort=-fantasyPts" | jq '.'
+
+echo "== /sources/projections (sample) =="
+curl_json "${BASE_URL}/sources/projections?limit=5" | jq '.'

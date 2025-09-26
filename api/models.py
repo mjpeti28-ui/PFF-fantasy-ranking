@@ -274,6 +274,7 @@ class WaiverCandidate(BaseModel):
     vor: Optional[float] = None
     bench_score: Optional[float] = Field(default=None, alias="benchScore")
     ovar: Optional[float] = Field(default=None, alias="oVAR")
+    need_factor: Optional[float] = Field(default=None, alias="needFactor")
 
 
 class WaiverListResponse(BaseModel):
@@ -320,3 +321,12 @@ class WaiverRecommendResponse(BaseModel):
     combined_scores: Dict[str, float] = Field(..., alias="combinedScores")
     leaderboards: Dict[str, List[LeaderboardEntry]]
     details: Optional[List[TeamDetail]] = None
+
+
+class DataTableResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
