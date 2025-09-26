@@ -81,7 +81,7 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 ## REST API Endpoints
 The FastAPI layer (`api/`) currently exposes:
 - `GET /healthz` – basic health check.
-- `GET /config`, `PATCH /config` – inspect and tweak runtime knobs.
+- `GET /config`, `PATCH /config`, `GET /config/help` – inspect, tweak, and describe runtime knobs.
 - `GET /league`, `POST /league/reload` – metadata and data refresh.
 - `GET /players`, `GET /players/{player_id}` – search or inspect individual players.
 - `GET /rankings` – top-N lists by any metric.
@@ -147,6 +147,14 @@ Spin up the server with `uvicorn api.main:app --reload --reload-exclude '.venv/*
 - When altering projections or rankings, confirm `history/manifest.json` updates (indicating a new snapshot was archived).
 - Use the Streamlit "Simulation Playground" to sanity-check the sensitivity of combined scores to new heuristics before shipping them.
 - For trade logic changes, re-run the Streamlit Trade Finder against known scenarios and verify acceptance scores and narratives are aligned with expectations.
-- Install dev dependencies with `pip install -r requirements-dev.txt`, then run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, `/trade/evaluate`, `/trade/find`, and `/waivers/candidates` without requiring a live Uvicorn server.
+- Install dev dependencies with `pip install -r requirements-dev.txt`, then run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, `/trade/evaluate`, `/trade/find`, `/waivers/candidates`, `/waivers/recommend`, `/teams`, `/stats/{dataset}`, `/sources/*`, and `/top/players` without requiring a live Uvicorn server.
+
+## Deployment Notes
+- Runtime dependencies live in `requirements.txt`; install them with `pip install -r requirements.txt` before starting Uvicorn.
+- Set environment variables on your host:
+  - `PFF_API_KEY` (required for authenticated access; clients send it as `X-API-Key`).
+  - `RANKINGS_CSV`, `PROJECTIONS_CSV`, `SUPPLEMENTAL_RANKINGS_CSV` (optional overrides for the bundled CSVs).
+- Launch with `uvicorn api.main:app --host 0.0.0.0 --port 8000` (Render/Heroku friendly).
+- After updating data files in Git, call `POST /league/reload` to refresh the in-memory context for the running service.
 
 Happy roster tinkering!

@@ -6,6 +6,8 @@ import argparse
 import copy
 from typing import Dict, List
 from pathlib import Path
+import os
+
 from data import load_rankings, build_lookups, load_rosters
 from optimizer import (
     flatten_league_names, optimize_lineups_first_pass, compute_worst_starter_bounds,
@@ -98,9 +100,19 @@ def print_projection_sample(df, count=10):
         print(f"{int(row['Rank']):>5} {row['Position']:<4} {int(row['PosRank']):>7} {proj_str:>9}  {row['Name']}")
     print()
 
-DEFAULT_RANKINGS = Path(__file__).with_name("ROS_week_2_PFF_rankings.csv")
-DEFAULT_PROJECTIONS = Path(__file__).with_name(PROJECTIONS_CSV)
-DEFAULT_SUPPLEMENTAL_RANKINGS = Path(__file__).with_name("PFF_rankings.csv")
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def _resolve_data_path(name: str) -> Path:
+    path = Path(name)
+    if not path.is_absolute():
+        path = BASE_DIR / name
+    return path
+
+
+DEFAULT_RANKINGS = _resolve_data_path(os.getenv("RANKINGS_CSV", "ROS_week_2_PFF_rankings.csv"))
+DEFAULT_PROJECTIONS = _resolve_data_path(PROJECTIONS_CSV)
+DEFAULT_SUPPLEMENTAL_RANKINGS = _resolve_data_path(os.getenv("SUPPLEMENTAL_RANKINGS_CSV", "PFF_rankings.csv"))
 
 
 def evaluate_league(

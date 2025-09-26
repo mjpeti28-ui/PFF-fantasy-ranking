@@ -11,6 +11,7 @@ work while the migration is in progress.
 
 from __future__ import annotations
 
+import os
 from threading import RLock
 from typing import Any, Dict
 
@@ -105,7 +106,7 @@ BENCH_PERCENTILE_CLAMP = _DEFAULT_SETTINGS["bench_percentile_clamp"]
 
 # Projection input file remains a simple constant; individual requests can pass
 # alternate paths without mutating global state.
-PROJECTIONS_CSV = "projections.csv"
+PROJECTIONS_CSV = os.getenv("PROJECTIONS_CSV", "projections.csv")
 
 
 # Slots used in optimization (K/DST omitted from scoring)

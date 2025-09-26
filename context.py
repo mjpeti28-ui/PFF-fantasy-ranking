@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,8 +21,15 @@ STATS_DIR = Path("Stats")
 SOS_DIR = Path("StrengthOfSchedule")
 
 
-DEFAULT_RANKINGS_PATH = Path(__file__).with_name("ROS_week_2_PFF_rankings.csv")
-DEFAULT_SUPPLEMENTAL_PATH = Path(__file__).with_name("PFF_rankings.csv")
+def _resolve_data_path(name: str) -> Path:
+    path = Path(name)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parent / name
+    return path
+
+
+DEFAULT_RANKINGS_PATH = _resolve_data_path(os.getenv("RANKINGS_CSV", "ROS_week_2_PFF_rankings.csv"))
+DEFAULT_SUPPLEMENTAL_PATH = _resolve_data_path(os.getenv("SUPPLEMENTAL_RANKINGS_CSV", "PFF_rankings.csv"))
 
 
 @dataclass(frozen=True)
