@@ -16,15 +16,7 @@ from scoring import (
     starter_values, replacement_counts, replacement_points, compute_worst_bench_bounds,
     bench_generous_finalize, bench_tables, leaderboards, build_scarcity_curves
 )
-from config import (
-    BENCH_OVAR_BETA,
-    BENCH_Z_FALLBACK_THRESHOLD,
-    BENCH_PERCENTILE_CLAMP,
-    COMBINED_STARTERS_WEIGHT,
-    COMBINED_BENCH_WEIGHT,
-    PROJECTIONS_CSV,
-    PROJECTION_SCALE_BETA,
-)
+from config import PROJECTIONS_CSV, settings
 
 def hr(char="─", n=80):  # horizontal rule
     print(char * n)
@@ -73,7 +65,9 @@ def print_team_starters(team, starters, replacement_points):
         print(f"{pos:<14} {name:<26} {proj_s:>7} {vor_s:>7} {rnk_s:>7} {prank_s:>8}")
     print()
 
-def print_team_bench(team, rows, topN=None, bench_beta: float = BENCH_OVAR_BETA):
+def print_team_bench(team, rows, topN=None, bench_beta: float | None = None):
+    if bench_beta is None:
+        bench_beta = settings.get("bench_ovar_beta")
     print(f"Bench — {team}  (beta={bench_beta})"); hr()
     print(f"{'Name':<26} {'Pos':<4} {'Proj':>7} {'VOR':>7} {'oVAR':>7} {'Overall':>7} {'PosRank':>8} {'BenchScore':>11}")
     hr("—", 80)
@@ -116,16 +110,28 @@ def evaluate_league(
     projection_scale_beta: float | None = None,
     replacement_skip_pct: float = 0.1,
     replacement_window: int = 3,
-    bench_ovar_beta: float = BENCH_OVAR_BETA,
-    combined_starters_weight: float = COMBINED_STARTERS_WEIGHT,
-    combined_bench_weight: float = COMBINED_BENCH_WEIGHT,
-    bench_z_fallback_threshold: float = BENCH_Z_FALLBACK_THRESHOLD,
-    bench_percentile_clamp: float = BENCH_PERCENTILE_CLAMP,
+    bench_ovar_beta: float | None = None,
+    combined_starters_weight: float | None = None,
+    combined_bench_weight: float | None = None,
+    bench_z_fallback_threshold: float | None = None,
+    bench_percentile_clamp: float | None = None,
     scarcity_sample_step: float = 0.5,
     custom_rosters: Dict[str, Dict[str, List[str]]] | None = None,
     supplemental_path: str | None = None,
 ):
-    beta = PROJECTION_SCALE_BETA if projection_scale_beta is None else projection_scale_beta
+    default_beta = settings.get("projection_scale_beta")
+    beta = default_beta if projection_scale_beta is None else projection_scale_beta
+
+    if bench_ovar_beta is None:
+        bench_ovar_beta = settings.get("bench_ovar_beta")
+    if combined_starters_weight is None:
+        combined_starters_weight = settings.get("combined_starters_weight")
+    if combined_bench_weight is None:
+        combined_bench_weight = settings.get("combined_bench_weight")
+    if bench_z_fallback_threshold is None:
+        bench_z_fallback_threshold = settings.get("bench_z_fallback_threshold")
+    if bench_percentile_clamp is None:
+        bench_percentile_clamp = settings.get("bench_percentile_clamp")
 
     if supplemental_path is None and DEFAULT_SUPPLEMENTAL_RANKINGS.exists():
         supplemental_path = str(DEFAULT_SUPPLEMENTAL_RANKINGS)
@@ -202,7 +208,7 @@ def evaluate_league(
         bench_percentile_clamp=bench_percentile_clamp,
     )
 
-    settings = {
+    settings_snapshot = {
         "projection_scale_beta": beta,
         "replacement_skip_pct": replacement_skip_pct,
         "replacement_window": replacement_window,
@@ -235,7 +241,7 @@ def evaluate_league(
         "max_rank": max_rank,
         "scarcity_curves": scarcity_curves,
         "scarcity_samples": scarcity_samples,
-        "settings": settings,
+        "settings": settings_snapshot,
         "rosters": copy.deepcopy(rosters),
     }
 

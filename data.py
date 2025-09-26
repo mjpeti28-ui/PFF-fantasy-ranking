@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 import pandas as pd
 from typing import Dict, Optional
-from config import CSV_RENAME, PROJECTIONS_CSV, PROJECTION_SCALE_BETA
+from config import CSV_RENAME, PROJECTIONS_CSV, settings
 from rosters import Fantasy_Rosters
 
 SUFFIXES = [' jr', ' sr', ' iii', ' ii', ' iv', ' v']
@@ -102,7 +102,8 @@ def load_rankings(
         df = df_primary
 
     proj_df = load_projections(projections_path)
-    beta = PROJECTION_SCALE_BETA if projection_scale_beta is None else projection_scale_beta
+    beta_default = settings.get("projection_scale_beta")
+    beta = beta_default if projection_scale_beta is None else projection_scale_beta
     if not proj_df.empty:
         df = df.merge(proj_df, on="name_norm", how="left", suffixes=('', '_proj'))
         if df["ProjPoints"].notna().any():

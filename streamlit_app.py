@@ -10,15 +10,7 @@ import altair as alt
 from alias import build_alias_map
 from data import load_rosters, normalize_name
 import main as main_module
-from config import (
-    PROJECTION_SCALE_BETA,
-    BENCH_OVAR_BETA,
-    COMBINED_STARTERS_WEIGHT,
-    COMBINED_BENCH_WEIGHT,
-    BENCH_Z_FALLBACK_THRESHOLD,
-    BENCH_PERCENTILE_CLAMP,
-    SCORABLE_POS,
-)
+from config import SCORABLE_POS, settings
 from trading import (
     TradeFinder,
     TRADE_CONFIG,
@@ -706,12 +698,14 @@ def render_power_rankings(teams: List[str]) -> None:
         "replacement_window": "Average projections over this many players when setting replacement-level points for each position.",
     }
 
+    knob_defaults = settings.snapshot()
+
     st.sidebar.subheader("Projection scaling")
     projection_scale_beta = st.sidebar.slider(
         "Projection scale beta",
         0.0,
         1.5,
-        PROJECTION_SCALE_BETA,
+        knob_defaults["projection_scale_beta"],
         step=0.05,
         help=knob_help["projection_scale_beta"],
         key="rank_projection_beta",
@@ -722,7 +716,7 @@ def render_power_rankings(teams: List[str]) -> None:
         "Starter weight",
         0.0,
         1.0,
-        COMBINED_STARTERS_WEIGHT,
+        knob_defaults["combined_starters_weight"],
         step=0.05,
         help=knob_help["combined_weights"],
         key="rank_starter_weight",
@@ -735,7 +729,7 @@ def render_power_rankings(teams: List[str]) -> None:
         "Bench oVAR beta",
         0.0,
         1.0,
-        BENCH_OVAR_BETA,
+        knob_defaults["bench_ovar_beta"],
         step=0.05,
         help=knob_help["bench_ovar_beta"],
         key="rank_bench_beta",
@@ -744,7 +738,7 @@ def render_power_rankings(teams: List[str]) -> None:
         "Bench z fallback threshold",
         0.0,
         5.0,
-        BENCH_Z_FALLBACK_THRESHOLD,
+        knob_defaults["bench_z_fallback_threshold"],
         step=0.1,
         help=knob_help["bench_z_threshold"],
         key="rank_bench_threshold",
@@ -753,7 +747,7 @@ def render_power_rankings(teams: List[str]) -> None:
         "Bench percentile clamp",
         0.01,
         0.25,
-        BENCH_PERCENTILE_CLAMP,
+        knob_defaults["bench_percentile_clamp"],
         step=0.01,
         help=knob_help["bench_percentile_clamp"],
         key="rank_bench_clamp",
@@ -829,7 +823,7 @@ def render_power_rankings(teams: List[str]) -> None:
         )
         epw_summary = compute_league_epw(league, alpha=epw_alpha) if use_epw else None
 
-    settings = league["settings"]
+    settings_used = league["settings"]
     leaderboards = league["leaderboards"]
 
     combined_df = leaderboard_df(leaderboards["combined"], "Combined Score")
@@ -957,18 +951,19 @@ def render_power_rankings(teams: List[str]) -> None:
         st.info("No projection data available to build scarcity curves.")
 
     with st.expander("Settings used"):
-        st.json(settings)
+        st.json(settings_used)
 
 
 def render_simulation_playground(teams: List[str]) -> None:
     store = SIM_STORE
 
+    current_knobs = settings.snapshot()
     defaults = {
-        "projection_scale_beta": PROJECTION_SCALE_BETA,
-        "combined_starters_weight": COMBINED_STARTERS_WEIGHT,
-        "bench_ovar_beta": BENCH_OVAR_BETA,
-        "bench_z_fallback_threshold": BENCH_Z_FALLBACK_THRESHOLD,
-        "bench_percentile_clamp": BENCH_PERCENTILE_CLAMP,
+        "projection_scale_beta": current_knobs["projection_scale_beta"],
+        "combined_starters_weight": current_knobs["combined_starters_weight"],
+        "bench_ovar_beta": current_knobs["bench_ovar_beta"],
+        "bench_z_fallback_threshold": current_knobs["bench_z_fallback_threshold"],
+        "bench_percentile_clamp": current_knobs["bench_percentile_clamp"],
         "replacement_skip_pct": 0.1,
         "replacement_window": 3,
         "scarcity_sample_step": 0.5,

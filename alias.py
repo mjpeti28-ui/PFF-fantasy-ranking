@@ -1,7 +1,7 @@
 from difflib import SequenceMatcher
 from typing import Dict, Optional, Iterable
 from data import normalize_name
-from config import FUZZY_CUTOFF
+from config import settings
 
 def find_best(name: str, df) -> Optional[str]:
     """Return canonical CSV Name or None."""
@@ -15,11 +15,12 @@ def find_best(name: str, df) -> Optional[str]:
     # fuzzy
     best = None
     best_score = 0.0
+    cutoff = settings.get("fuzzy_cutoff")
     for _, row in df.iterrows():
         score = SequenceMatcher(None, n, row["name_norm"]).ratio()
         if score > best_score:
             best, best_score = row, score
-    if best is not None and best_score >= FUZZY_CUTOFF:
+    if best is not None and best_score >= cutoff:
         return best["Name"]
     return None
 

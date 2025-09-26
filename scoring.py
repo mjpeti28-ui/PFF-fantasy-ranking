@@ -5,14 +5,7 @@ from collections import Counter
 from typing import Dict, List, Tuple, Optional
 import numpy as np
 import pandas as pd
-from config import (
-    SCORABLE_POS,
-    COMBINED_STARTERS_WEIGHT,
-    COMBINED_BENCH_WEIGHT,
-    BENCH_OVAR_BETA,
-    BENCH_Z_FALLBACK_THRESHOLD,
-    BENCH_PERCENTILE_CLAMP,
-)
+from config import SCORABLE_POS, settings
 
 
 def _build_monotone_cubic_spline(x: np.ndarray, y: np.ndarray) -> Dict[str, np.ndarray]:
@@ -217,7 +210,13 @@ def compute_worst_bench_bounds(team_results):
         wb_posrank[pos] = max(prs) if prs else None
     return wb_overall, wb_posrank
 
-def bench_tables(team_results, replacement_points: Dict[str,float], max_rank: int, beta: float = BENCH_OVAR_BETA):
+def bench_tables(
+    team_results,
+    replacement_points: Dict[str, float],
+    max_rank: int,
+    beta: float | None = None,
+):
+    bench_beta = settings.get("bench_ovar_beta") if beta is None else beta
     tables = {}
     totals = {}
     for team, res in team_results.items():
@@ -233,12 +232,19 @@ def bench_tables(team_results, replacement_points: Dict[str,float], max_rank: in
                 proj = repl
             vor = max(0.0, proj - repl)
             ovar = max(0, max_rank - r + 1)
-            rows.append({
-                "name": p["name"], "pos": pos, "rank": r, "posrank": pr,
-                "proj": float(proj) if proj is not None else None,
-                "vor": round(vor, 2), "pVAR": round(vor, 2), "oVAR": ovar,
-                "BenchScore": round(vor + beta*ovar, 2)
-            })
+            rows.append(
+                {
+                    "name": p["name"],
+                    "pos": pos,
+                    "rank": r,
+                    "posrank": pr,
+                    "proj": float(proj) if proj is not None else None,
+                    "vor": round(vor, 2),
+                    "pVAR": round(vor, 2),
+                    "oVAR": ovar,
+                    "BenchScore": round(vor + bench_beta * ovar, 2),
+                }
+            )
         rows = sorted(rows, key=lambda x: x["BenchScore"], reverse=True)
         tables[team] = rows
         totals[team] = round(sum(x["BenchScore"] for x in rows), 2)
@@ -267,11 +273,22 @@ def leaderboards(
     starters_totals: Dict[str, float],
     bench_totals: Dict[str, float],
     *,
-    combined_starters_weight: float = COMBINED_STARTERS_WEIGHT,
-    combined_bench_weight: float = COMBINED_BENCH_WEIGHT,
-    bench_z_fallback_threshold: float = BENCH_Z_FALLBACK_THRESHOLD,
-    bench_percentile_clamp: float = BENCH_PERCENTILE_CLAMP,
+    combined_starters_weight: float | None = None,
+    combined_bench_weight: float | None = None,
+    bench_z_fallback_threshold: float | None = None,
+    bench_percentile_clamp: float | None = None,
 ):
+    if combined_starters_weight is None or combined_bench_weight is None:
+        starter_w = settings.get("combined_starters_weight")
+        bench_w = settings.get("combined_bench_weight")
+        if combined_starters_weight is None:
+            combined_starters_weight = starter_w
+        if combined_bench_weight is None:
+            combined_bench_weight = bench_w
+    if bench_z_fallback_threshold is None:
+        bench_z_fallback_threshold = settings.get("bench_z_fallback_threshold")
+    if bench_percentile_clamp is None:
+        bench_percentile_clamp = settings.get("bench_percentile_clamp")
     starter_vals = list(starters_totals.values())
     bench_vals = list(bench_totals.values())
     mu_s = stats.mean(starter_vals)
