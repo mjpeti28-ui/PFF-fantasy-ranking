@@ -1,6 +1,6 @@
 # Fantasy League Explorer
 
-This repository evaluates custom fantasy football leagues on top of publicly available PFF data, blends projection-driven heuristics with value-over-replacement logic, and exposes the tooling through both a command-line report and an interactive Streamlit application. The code is configured for a keeper-style league that mixes NFL veterans with college prospects, but almost every knob is exposed so you can retune the engine for new data sources or league rules.
+This repository evaluates custom fantasy football leagues on top of publicly available PFF data, blends projection-driven heuristics with value-over-replacement logic, and exposes the tooling through both a command-line report and an interactive Streamlit application. The code is configured for a redraft-style league, but almost every knob is exposed so you can retune the engine for new data sources or league rules.
 
 ## Ethos and Guiding Principles
 - **Transparency first**: Every scoring weight, fallback, and tie-breaker lives in `config.py` so you can audit or override the math.
