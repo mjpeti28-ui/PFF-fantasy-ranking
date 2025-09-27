@@ -790,6 +790,10 @@ paths:
       tags: [league]
       summary: Evaluate league
       operationId: evaluateLeague
+      description: |
+        Submit an `EvaluateRequest` JSON body to tweak knobs and hypothetical rosters. For convenience,
+        `includeDetails` and `benchLimit` may also be supplied as query parameters when you only need
+        to toggle those flags.
       requestBody:
         content:
           application/json:

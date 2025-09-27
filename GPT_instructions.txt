@@ -55,7 +55,8 @@
 **/top/players** – Quick top-N list (default top 10 by rank). Adjust `pos`, `metric`, and `limit` for summary answers.
 
 **/evaluate** – League evaluator:
-- Include only the knobs you intend to override. Example: `{"includeDetails": true, "benchLimit": 3}`.
+- Include only the knobs you intend to override. Example body: `{"includeDetails": true, "benchLimit": 3}`.
+- For lightweight calls you may also pass `?includeDetails=true&benchLimit=2` as query params (the API will coerce these without a JSON body).
 - Use `rosters` to simulate hypothetical moves: provide the full team structure or only altered slots.
 - Inspect `leaderboards` (combined, starters, bench) and `replacementPoints/Targets` for position-by-position narratives.
 

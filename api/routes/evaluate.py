@@ -4,7 +4,7 @@ import copy
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, Query
 
 from api.dependencies import get_context_manager, require_api_key
 from api.models import (
@@ -23,10 +23,21 @@ router = APIRouter(prefix="/evaluate", tags=["evaluate"], dependencies=[Depends(
 
 @router.post("", response_model=EvaluateResponse, summary="Evaluate league with optional overrides")
 async def evaluate_endpoint(
-    payload: EvaluateRequest,
+    payload: EvaluateRequest | None = Body(default=None),
+    include_details: bool | None = Query(None, alias="includeDetails"),
+    bench_limit: int | None = Query(None, alias="benchLimit"),
     manager: ContextManager = Depends(get_context_manager),
 ) -> EvaluateResponse:
     ctx = manager.get()
+
+    if payload is None:
+        payload = EvaluateRequest(includeDetails=include_details or False, benchLimit=bench_limit)
+    else:
+        # Allow simple query overrides to coexist with JSON body (query wins if provided)
+        if include_details is not None:
+            payload.include_details = include_details
+        if bench_limit is not None:
+            payload.bench_limit = bench_limit
 
     rankings_path = payload.rankings_path or str(ctx.rankings_path)
     projections_path = payload.projections_path or (str(ctx.projections_path) if ctx.projections_path else None)
