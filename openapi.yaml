@@ -772,19 +772,9 @@ paths:
           in: query
           required: false
           schema: {type: integer, minimum: 0}
-      requestBody:
-        required: false
-        description: Either provide a JSON body or rely on the query parameters above.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TradeFindRequest'
-            example:
-              teamA: JohnBurrows_School
-              teamB: KWood_Super_Marios
-              maxPlayers: 2
-              playerPool: 6
-              topResults: 3
+      description: |
+        Provide parameters via query string or submit the JSON body described by `TradeFindRequest`.
+        When using query parameters, at minimum `teamA` and `teamB` must be supplied.
       responses:
         '200':
           description: Candidate trades ordered by objective score

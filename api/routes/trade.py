@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
@@ -18,6 +18,7 @@ from api.models import (
 from api.utils import build_leaderboards_map, build_team_details, coerce_float
 from context import ContextManager
 from trading import TradeFinder
+from pydantic import ValidationError
 
 router = APIRouter(prefix="/trade", tags=["trade"], dependencies=[Depends(require_api_key)])
 
@@ -112,7 +113,7 @@ async def evaluate_trade_endpoint(
 
 @router.post("/find", response_model=TradeFindResponse, summary="Search for favorable trades")
 async def find_trades_endpoint(
-    payload: TradeFindRequest | None = Body(default=None, embed=False),
+    payload: Dict[str, Any] | None = Body(default=None),
     team_a: str | None = Query(None, alias="teamA"),
     team_b: str | None = Query(None, alias="teamB"),
     max_players: int | None = Query(None, alias="maxPlayers"),
@@ -123,13 +124,20 @@ async def find_trades_endpoint(
     bench_limit: int | None = Query(None, alias="benchLimit"),
     manager: ContextManager = Depends(get_context_manager),
 ) -> TradeFindResponse:
-    if payload is None:
+    request_model: TradeFindRequest
+
+    if payload:
+        try:
+            request_model = TradeFindRequest.model_validate(payload)
+        except ValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+    else:
         if team_a is None or team_b is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="teamA and teamB are required",
             )
-        data: Dict[str, object] = {
+        data: Dict[str, Any] = {
             "team_a": team_a,
             "team_b": team_b,
         }
@@ -145,40 +153,40 @@ async def find_trades_endpoint(
             data["include_details"] = include_details
         if bench_limit is not None:
             data["bench_limit"] = bench_limit
-        payload = TradeFindRequest(**data)
+        request_model = TradeFindRequest(**data)
 
     ctx = manager.get()
     finder = _instantiate_finder(ctx)
 
     try:
         results = finder.find_trades(
-            payload.team_a,
-            payload.team_b,
-            max_players=payload.max_players,
-            player_pool=payload.player_pool,
-            top_results=payload.top_results,
-            top_bench=payload.top_bench,
-            min_gain_a=payload.min_gain_a,
-            max_loss_b=payload.max_loss_b,
-            prune_margin=payload.prune_margin,
-            min_upper_bound=payload.min_upper_bound,
-            fairness_mode=payload.fairness_mode,
-            fairness_self_bias=payload.fairness_self_bias,
-            fairness_penalty_weight=payload.fairness_penalty_weight,
-            consolidation_bonus=payload.consolidation_bonus,
-            drop_tax_factor=payload.drop_tax_factor,
-            acceptance_fairness_weight=payload.acceptance_fairness_weight,
-            acceptance_need_weight=payload.acceptance_need_weight,
-            acceptance_star_weight=payload.acceptance_star_weight,
-            acceptance_need_scale=payload.acceptance_need_scale,
-            star_vor_scale=payload.star_vor_scale,
-            drop_tax_acceptance_weight=payload.drop_tax_acceptance_weight,
-            narrative_on=payload.narrative_on,
-            min_acceptance=payload.min_acceptance,
+            request_model.team_a,
+            request_model.team_b,
+            max_players=request_model.max_players,
+            player_pool=request_model.player_pool,
+            top_results=request_model.top_results,
+            top_bench=request_model.top_bench,
+            min_gain_a=request_model.min_gain_a,
+            max_loss_b=request_model.max_loss_b,
+            prune_margin=request_model.prune_margin,
+            min_upper_bound=request_model.min_upper_bound,
+            fairness_mode=request_model.fairness_mode,
+            fairness_self_bias=request_model.fairness_self_bias,
+            fairness_penalty_weight=request_model.fairness_penalty_weight,
+            consolidation_bonus=request_model.consolidation_bonus,
+            drop_tax_factor=request_model.drop_tax_factor,
+            acceptance_fairness_weight=request_model.acceptance_fairness_weight,
+            acceptance_need_weight=request_model.acceptance_need_weight,
+            acceptance_star_weight=request_model.acceptance_star_weight,
+            acceptance_need_scale=request_model.acceptance_need_scale,
+            star_vor_scale=request_model.star_vor_scale,
+            drop_tax_acceptance_weight=request_model.drop_tax_acceptance_weight,
+            narrative_on=request_model.narrative_on,
+            min_acceptance=request_model.min_acceptance,
             verbose=False,
             show_progress=False,
-            must_receive_from_b=payload.must_receive_b or None,
-            must_send_from_a=payload.must_send_a or None,
+            must_receive_from_b=request_model.must_receive_b or None,
+            must_send_from_a=request_model.must_send_a or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -195,12 +203,12 @@ async def find_trades_endpoint(
         evaluation = entry.get("evaluation", {})
         details_payload = None
         leaderboards_payload = None
-        if payload.include_details and evaluation:
+        if request_model.include_details and evaluation:
             details_payload = build_team_details(
-                [payload.team_a, payload.team_b],
+                [request_model.team_a, request_model.team_b],
                 results=evaluation.get("results", {}),
                 bench_tables=evaluation.get("bench_tables", {}),
-                bench_limit=payload.bench_limit,
+                bench_limit=request_model.bench_limit,
             )
         if evaluation:
             leaderboards_payload = build_leaderboards_map(
