@@ -144,6 +144,64 @@ components:
         limit: {type: integer}
         offset: {type: integer}
         metric: {type: string}
+    PlayerOwnership:
+      type: object
+      properties:
+        team: {type: string, nullable: true}
+        rosterSlot: {type: string, nullable: true}
+        rawName: {type: string, nullable: true}
+        isIR: {type: boolean}
+        isFreeAgent: {type: boolean}
+      required: [isIR, isFreeAgent]
+    PlayerComparison:
+      type: object
+      properties:
+        query: {type: string}
+        canonical: {type: string, nullable: true}
+        matches:
+          type: array
+          items: {type: string}
+        position: {type: string, nullable: true}
+        team: {type: string, nullable: true}
+        rank: {type: integer, nullable: true}
+        posRank: {type: integer, nullable: true}
+        projPoints: {type: number, nullable: true}
+        projZ: {type: number, nullable: true}
+        vor: {type: number, nullable: true}
+        ownership:
+          $ref: '#/components/schemas/PlayerOwnership'
+        rankings: {type: object}
+        projections: {type: object}
+        stats:
+          type: object
+          additionalProperties: {type: object}
+        aliases:
+          type: array
+          items: {type: string}
+        notes: {type: object}
+      required: [query, matches, rankings, projections, stats, aliases, notes]
+    PlayerComparisonRequest:
+      type: object
+      properties:
+        players:
+          type: array
+          items: {type: string}
+          description: Case-insensitive player names or aliases to compare.
+        includeStats: {type: boolean, default: true}
+        includeProjections: {type: boolean, default: true}
+        includeAliases: {type: boolean, default: false}
+      required: [players]
+    PlayerComparisonResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/PlayerComparison'}
+          description: Normalised comparison objects returned in the same order as requested.
+        unresolved:
+          type: array
+          items: {type: string}
+          description: Names the service could not resolve; see the corresponding item.matches list for suggestions.
     LeaderboardEntry:
       type: object
       properties:
@@ -645,6 +703,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerDetail'
+  /players/compare:
+    post:
+      tags: [players]
+      summary: Compare multiple players across datasets
+      operationId: comparePlayers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerComparisonRequest'
+            example:
+              players: ["Puka Nacua", "Cooper Kupp", "Tyreek Hill"]
+              includeStats: true
+              includeProjections: true
+              includeAliases: false
+      responses:
+        '200':
+          description: Aggregated player comparison data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerComparisonResponse'
   /rankings:
     get:
       tags: [players]
@@ -791,6 +872,7 @@ paths:
         - name: includeDetails
           in: query
           required: false
+          description: Include starters/bench breakdowns for each proposal when true.
           schema: {type: boolean}
         - name: benchLimit
           in: query
@@ -804,6 +886,20 @@ paths:
       description: |
         Provide parameters via query string or submit the JSON body described by `TradeFindRequest`.
         When using query parameters, at minimum `teamA` and `teamB` must be supplied.
+      requestBody:
+        required: false
+        description: Use a JSON payload when you want to control multiple search knobs (fairness weights, narrative toggles, etc.).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeFindRequest'
+            example:
+              teamA: JohnBurrows_School
+              teamB: KWood_Super_Marios
+              maxPlayers: 3
+              playerPool: 24
+              topResults: 10
+              includeDetails: true
       responses:
         '200':
           description: Candidate trades ordered by objective score
@@ -817,6 +913,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobCreatedResponse'
+        '400':
+          description: Invalid input (e.g., unknown team or bad knob value).
+        '422':
+          description: Validation error when the JSON body is malformed.
   /waivers/candidates:
     get:
       tags: [waivers]

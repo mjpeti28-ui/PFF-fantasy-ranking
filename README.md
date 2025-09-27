@@ -28,6 +28,12 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
    ```
 4. **Excel output (optional)**: Use `reports.py` to export the tables produced by `evaluate_league` into an Excel workbook with methodology notes.
 
+## FastAPI API Highlights
+- **Ownership-aware comparisons**: `POST /players/compare` aggregates rankings, projections, stats, alias matches, and roster ownership (team/slot/free-agent) for any list of players—ideal for head-to-head breakdowns or waiver triage.
+- **Asynchronous trade search**: `POST /trade/find` automatically falls back to background jobs for large search spaces; poll `GET /jobs/{jobId}` to retrieve results when `202 Accepted` is returned. Synchronous calls remain available for lightweight scenarios.
+- **Player & roster discovery**: `/players`, `/rankings`, `/teams/{team}`, `/waivers/*`, `/stats/{dataset}`, and `/sources/*` expose the entire evaluation context for GPT or external clients.
+- **Guardrails & documentation**: The OpenAPI spec (`openapi.yaml`) lists every knob and parameter, while `GPT_instructions.txt` supplies an opinionated playbook for automated agents (authentication, recommended workflows, narrative templates, error handling).
+
 ## Data Inputs and Saved Artifacts
 - `ROS_week_2_PFF_rankings.csv`, `PFF_rankings.csv`: Baseline and supplemental PFF rankings (combined during ingest).
 - `projections.csv`: Player projection feed (`playerName`, `fantasyPoints`) used to scale raw ranks.
@@ -36,6 +42,7 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - `rosters.py`: Canonical league rosters (NFL and college players) split by positional groups.
 - `history/`: Auto-versioned copies of the latest rankings, projections, stats, and SOS files (timestamped by `history_tracker.py`).
 - `simulations/`: Persistent simulation runs with parameter sweeps, team summaries, and replacement levels.
+- `GPT_instructions.txt`: Operational guide for GPT-based agents—covers endpoint usage, throttling, async jobs, and reporting patterns.
 
 ## Core Evaluation Flow
 1. **Rankings ingest (`data.py`)**: Load primary and supplemental CSVs, normalize column names, compute position ranks, and merge projections (with configurable scaling via `PROJECTION_SCALE_BETA`).
@@ -139,6 +146,7 @@ Spin up the server with `uvicorn api.main:app --reload --reload-exclude '.venv/*
 ├── Stats/                  # PFF fantasy stats ingested by EPW
 ├── trading.py              # TradeFinder search engine and heuristics
 ├── ROS_week_2_PFF_rankings.csv / PFF_rankings.csv # Sample ranking feeds
+├── GPT_instructions.txt    # Instructions for GPT agents (endpoint best practices)
 └── README.md               # You are here
 ```
 

@@ -365,3 +365,50 @@ class JobCreatedResponse(BaseModel):
     status: JobStatus
     job_type: str = Field(..., alias="jobType")
     poll_url: str = Field(..., alias="pollUrl")
+
+
+class PlayerComparisonRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    players: List[str]
+    include_stats: bool = Field(default=True, alias="includeStats")
+    include_projections: bool = Field(default=True, alias="includeProjections")
+    include_aliases: bool = Field(default=False, alias="includeAliases")
+
+
+class PlayerOwnership(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team: Optional[str] = None
+    roster_slot: Optional[str] = Field(default=None, alias="rosterSlot")
+    raw_name: Optional[str] = Field(default=None, alias="rawName")
+    is_ir: bool = Field(default=False, alias="isIR")
+    is_free_agent: bool = Field(default=False, alias="isFreeAgent")
+
+
+class PlayerComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    query: str
+    canonical: Optional[str] = None
+    matches: List[str] = Field(default_factory=list)
+    position: Optional[str] = None
+    team: Optional[str] = None
+    rank: Optional[int] = None
+    pos_rank: Optional[int] = Field(default=None, alias="posRank")
+    proj_points: Optional[float] = Field(default=None, alias="projPoints")
+    proj_z: Optional[float] = Field(default=None, alias="projZ")
+    vor: Optional[float] = None
+    ownership: Optional[PlayerOwnership] = None
+    rankings: Dict[str, Any] = Field(default_factory=dict)
+    projections: Dict[str, Any] = Field(default_factory=dict)
+    stats: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    aliases: List[str] = Field(default_factory=list)
+    notes: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlayerComparisonResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: List[PlayerComparison]
+    unresolved: List[str] = Field(default_factory=list)

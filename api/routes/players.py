@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.dependencies import get_context_manager, require_api_key
-from api.models import PlayerDetail, PlayerListResponse, PlayerSummary
+from api.models import (
+    PlayerComparison,
+    PlayerComparisonRequest,
+    PlayerComparisonResponse,
+    PlayerDetail,
+    PlayerListResponse,
+    PlayerOwnership,
+    PlayerSummary,
+)
 from context import ContextManager
 from data import normalize_name
 
@@ -195,3 +203,147 @@ async def get_player(
 
     row = candidate.sort_values("Rank").iloc[0]
     return _build_detail(row)
+
+
+def _series_to_dict(row: pd.Series) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for key, value in row.items():
+        payload[key] = _safe_value(value)
+    return payload
+
+
+def _compute_name_series(df: pd.DataFrame) -> pd.Series:
+    if "name_norm" in df.columns:
+        return df["name_norm"].astype(str).str.lower()
+    if "Name" in df.columns:
+        return df["Name"].fillna("").astype(str).map(lambda x: normalize_name(x)).str.lower()
+    return pd.Series(["" for _ in range(len(df))], index=df.index)
+
+
+def _ownership_lookup(rosters: Dict[str, Dict[str, list[str]]], norm_name: str) -> PlayerOwnership:
+    for team, slots in rosters.items():
+        for slot, names in slots.items():
+            for raw in names:
+                cleaned = raw.replace(" (IR)", "")
+                if normalize_name(cleaned) == norm_name:
+                    is_ir = "(IR)" in raw
+                    return PlayerOwnership(
+                        team=team,
+                        roster_slot=slot,
+                        raw_name=raw,
+                        is_ir=is_ir,
+                        is_free_agent=False,
+                    )
+    return PlayerOwnership(team=None, roster_slot=None, raw_name=None, is_ir=False, is_free_agent=True)
+
+
+def _match_stats_row(df: pd.DataFrame, norm: str, name: str) -> Optional[Dict[str, Any]]:
+    lower_norm = norm.lower()
+    search_columns = ["name_norm", "Name", "player", "Player"]
+    for column in search_columns:
+        if column not in df.columns:
+            continue
+        series = df[column].fillna("").astype(str)
+        if column == "name_norm":
+            matches = df[series.str.lower() == lower_norm]
+        else:
+            matches = df[series.str.lower() == name.lower()]
+        if matches.empty:
+            continue
+        return _series_to_dict(matches.iloc[0])
+    return None
+
+
+def _gather_aliases(alias_map: Dict[str, str], canonical: str) -> list[str]:
+    if not alias_map:
+        return []
+    aliases = [alias for alias, target in alias_map.items() if target == canonical]
+    return sorted(set(aliases))
+
+
+@router.post("/compare", response_model=PlayerComparisonResponse, summary="Compare multiple players")
+async def compare_players(
+    payload: PlayerComparisonRequest,
+    manager: ContextManager = Depends(get_context_manager),
+) -> PlayerComparisonResponse:
+    ctx = manager.get()
+    df = ctx.dataframe
+    alias_map = ctx.alias_map or {}
+    rosters = ctx.rosters or {}
+    projections_df = ctx.projections_df if payload.include_projections else None
+    stats_data = ctx.stats_data if payload.include_stats else {}
+
+    items: list[PlayerComparison] = []
+    unresolved: list[str] = []
+
+    name_series = _compute_name_series(df)
+
+    for query in payload.players:
+        norm_query = normalize_name(query.replace(" (IR)", "")).lower()
+        matches = df[name_series == norm_query]
+
+        if matches.empty and alias_map:
+            canonical = alias_map.get(query) or alias_map.get(query.replace(" (IR)", ""))
+            if canonical:
+                norm_alias = normalize_name(canonical).lower()
+                matches = df[name_series == norm_alias]
+                if not matches.empty:
+                    norm_query = norm_alias
+
+        if matches.empty:
+            approx = df[df["Name"].str.contains(query, case=False, na=False)] if "Name" in df.columns else pd.DataFrame()
+            unresolved.append(query)
+            suggestions = approx["Name"].head(5).tolist() if not approx.empty else []
+            items.append(
+                PlayerComparison(
+                    query=query,
+                    canonical=None,
+                    matches=suggestions,
+                    ownership=PlayerOwnership(is_free_agent=True),
+                )
+            )
+            continue
+
+        row = matches.sort_values("Rank", na_position="last").iloc[0]
+        canonical_name = str(row.get("Name", query))
+
+        ownership = _ownership_lookup(rosters, norm_query)
+
+        projections_payload: Dict[str, Any] = {}
+        if projections_df is not None and not projections_df.empty:
+            proj_row = _match_stats_row(projections_df, norm_query, canonical_name)
+            if proj_row:
+                projections_payload = proj_row
+
+        stats_payload: Dict[str, Dict[str, Any]] = {}
+        if stats_data:
+            for dataset_name, dataset_df in stats_data.items():
+                if dataset_df is None or dataset_df.empty:
+                    continue
+                stat_row = _match_stats_row(dataset_df, norm_query, canonical_name)
+                if stat_row:
+                    stats_payload[dataset_name] = stat_row
+
+        aliases: list[str] = _gather_aliases(alias_map, canonical_name) if payload.include_aliases else []
+
+        comparison = PlayerComparison(
+            query=query,
+            canonical=canonical_name,
+            matches=matches["Name"].tolist(),
+            position=row.get("Position"),
+            team=row.get("Team"),
+            rank=int(_series_get(row, "Rank")) if _series_get(row, "Rank") is not None else None,
+            pos_rank=int(_series_get(row, "PosRank")) if _series_get(row, "PosRank") is not None else None,
+            proj_points=_series_get(row, "ProjPoints"),
+            proj_z=_series_get(row, "ProjZ"),
+            vor=_series_get(row, "VOR") or _series_get(row, "vor"),
+            ownership=ownership,
+            rankings=_series_to_dict(row),
+            projections=projections_payload,
+            stats=stats_payload,
+            aliases=aliases,
+            notes={},
+        )
+        items.append(comparison)
+
+    return PlayerComparisonResponse(items=items, unresolved=unresolved)
