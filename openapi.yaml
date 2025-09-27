@@ -842,50 +842,10 @@ paths:
       tags: [trade]
       summary: Search for favorable trades
       operationId: findTrades
-      parameters:
-        - name: teamA
-          in: query
-          required: false
-          description: Team initiating the trade search (required if body omitted).
-          schema: {type: string}
-        - name: teamB
-          in: query
-          required: false
-          description: Trade partner (required if body omitted).
-          schema: {type: string}
-        - name: maxPlayers
-          in: query
-          required: false
-          schema: {type: integer, minimum: 1}
-        - name: playerPool
-          in: query
-          required: false
-          schema: {type: integer, minimum: 1}
-        - name: topResults
-          in: query
-          required: false
-          schema: {type: integer, minimum: 1}
-        - name: topBench
-          in: query
-          required: false
-          schema: {type: integer, minimum: 1}
-        - name: includeDetails
-          in: query
-          required: false
-          description: Include starters/bench breakdowns for each proposal when true.
-          schema: {type: boolean}
-        - name: benchLimit
-          in: query
-          required: false
-          schema: {type: integer, minimum: 0}
-        - name: runAsync
-          in: query
-          required: false
-          description: Force the search to run as a background job. The API will return a 202 with a jobId.
-          schema: {type: boolean}
       description: |
-        Provide parameters via query string or submit the JSON body described by `TradeFindRequest`.
-        When using query parameters, at minimum `teamA` and `teamB` must be supplied.
+        Submit a JSON body described by `TradeFindRequest`. For quick ad-hoc usage you may also pass
+        the same fields as query parameters (teamA, teamB, maxPlayers, playerPool, topResults,
+        topBench, includeDetails, benchLimit, runAsync), but the canonical contract uses the JSON body.
       requestBody:
         required: false
         description: Use a JSON payload when you want to control multiple search knobs (fairness weights, narrative toggles, etc.).
