@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from pathlib import Path
 
@@ -11,7 +11,7 @@ from context import ContextManager
 router = APIRouter(prefix="/league", tags=["league"], dependencies=[Depends(require_api_key)])
 
 
-@router.get("/", response_model=LeagueMetadataResponse, summary="Get league metadata")
+@router.get("", response_model=LeagueMetadataResponse, summary="Get league metadata")
 async def get_league_metadata(
     manager: ContextManager = Depends(get_context_manager),
 ) -> LeagueMetadataResponse:

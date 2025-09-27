@@ -10,7 +10,7 @@ from context import ContextManager
 router = APIRouter(prefix="/teams", tags=["teams"], dependencies=[Depends(require_api_key)])
 
 
-@router.get("/", summary="List team names")
+@router.get("", summary="List team names")
 async def list_teams(manager: ContextManager = Depends(get_context_manager)) -> list[str]:
     ctx = manager.get()
     return sorted(ctx.rosters.keys())

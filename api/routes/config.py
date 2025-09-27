@@ -9,12 +9,12 @@ from config import SETTINGS_HELP, settings
 router = APIRouter(prefix="/config", tags=["config"], dependencies=[Depends(require_api_key)])
 
 
-@router.get("/", response_model=ConfigResponse, summary="List current scoring knobs")
+@router.get("", response_model=ConfigResponse, summary="List current scoring knobs")
 async def get_config() -> ConfigResponse:
     return ConfigResponse(knobs=settings.snapshot())
 
 
-@router.patch("/", response_model=ConfigResponse, summary="Update one or more scoring knobs")
+@router.patch("", response_model=ConfigResponse, summary="Update one or more scoring knobs")
 async def patch_config(payload: ConfigUpdateRequest) -> ConfigResponse:
     if not payload.updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updates provided")

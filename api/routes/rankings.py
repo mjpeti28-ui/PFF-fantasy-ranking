@@ -12,7 +12,7 @@ from context import ContextManager
 router = APIRouter(prefix="/rankings", tags=["rankings"], dependencies=[Depends(require_api_key)])
 
 
-@router.get("/", response_model=PlayerListResponse, summary="Retrieve player rankings")
+@router.get("", response_model=PlayerListResponse, summary="Retrieve player rankings")
 async def get_rankings(
     manager: ContextManager = Depends(get_context_manager),
     pos: Optional[str] = Query(None, description="Filter by fantasy position"),

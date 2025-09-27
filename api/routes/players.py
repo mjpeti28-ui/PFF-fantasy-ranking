@@ -152,7 +152,7 @@ def _query_players_response(
     return PlayerListResponse(items=items, total=total, limit=limit, offset=offset, metric=metric.lower())
 
 
-@router.get("/", response_model=PlayerListResponse, summary="Search players")
+@router.get("", response_model=PlayerListResponse, summary="Search players")
 async def list_players(
     manager: ContextManager = Depends(get_context_manager),
     pos: Optional[str] = Query(None, description="Filter by fantasy position (QB/RB/WR/TE)"),
