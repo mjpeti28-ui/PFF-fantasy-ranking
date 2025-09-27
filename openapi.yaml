@@ -19,7 +19,45 @@ components:
   schemas:
     ConfigKnobs:
       type: object
-      additionalProperties: {}
+      description: Scoring knobs currently in effect. Values are floats between 0 and 1 unless noted.
+      additionalProperties: false
+      properties:
+        fuzzy_cutoff:
+          type: number
+          format: float
+          description: Minimum similarity required when matching roster names.
+        bench_ovar_beta:
+          type: number
+          format: float
+          description: Weight applied to overall rank advantage when scoring bench players.
+        combined_starters_weight:
+          type: number
+          format: float
+          description: Share of the combined score attributed to starter strength.
+        combined_bench_weight:
+          type: number
+          format: float
+          description: Share of the combined score attributed to bench depth.
+        projection_scale_beta:
+          type: number
+          format: float
+          description: Influence of projection z-scores when rescaling rankings.
+        bench_z_fallback_threshold:
+          type: number
+          format: float
+          description: Threshold that swaps to percentile-based bench scoring when variance is low.
+        bench_percentile_clamp:
+          type: number
+          format: float
+          description: Clamp applied to percentile-based z-scores to limit outlier influence.
+      required:
+        - fuzzy_cutoff
+        - bench_ovar_beta
+        - combined_starters_weight
+        - combined_bench_weight
+        - projection_scale_beta
+        - bench_z_fallback_threshold
+        - bench_percentile_clamp
     ConfigResponse:
       type: object
       properties:
@@ -30,12 +68,37 @@ components:
       properties:
         updates:
           type: object
-          additionalProperties: {}
+          description: Partial set of knobs to update.
+          additionalProperties: false
+          properties:
+            fuzzy_cutoff: {type: number, format: float}
+            bench_ovar_beta: {type: number, format: float}
+            combined_starters_weight: {type: number, format: float}
+            combined_bench_weight: {type: number, format: float}
+            projection_scale_beta: {type: number, format: float}
+            bench_z_fallback_threshold: {type: number, format: float}
+            bench_percentile_clamp: {type: number, format: float}
       required: [updates]
     ConfigHelp:
       type: object
-      additionalProperties:
-        type: string
+      description: Human-readable descriptions for each scoring knob.
+      additionalProperties: false
+      properties:
+        fuzzy_cutoff: {type: string}
+        bench_ovar_beta: {type: string}
+        combined_starters_weight: {type: string}
+        combined_bench_weight: {type: string}
+        projection_scale_beta: {type: string}
+        bench_z_fallback_threshold: {type: string}
+        bench_percentile_clamp: {type: string}
+      required:
+        - fuzzy_cutoff
+        - bench_ovar_beta
+        - combined_starters_weight
+        - combined_bench_weight
+        - projection_scale_beta
+        - bench_z_fallback_threshold
+        - bench_percentile_clamp
     LeagueMetadata:
       type: object
       properties:
