@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from api.dependencies import get_context_manager, require_api_key
 from api.models import (
@@ -112,9 +112,41 @@ async def evaluate_trade_endpoint(
 
 @router.post("/find", response_model=TradeFindResponse, summary="Search for favorable trades")
 async def find_trades_endpoint(
-    payload: TradeFindRequest,
+    payload: TradeFindRequest | None = Body(default=None, embed=False),
+    team_a: str | None = Query(None, alias="teamA"),
+    team_b: str | None = Query(None, alias="teamB"),
+    max_players: int | None = Query(None, alias="maxPlayers"),
+    player_pool: int | None = Query(None, alias="playerPool"),
+    top_results: int | None = Query(None, alias="topResults"),
+    top_bench: int | None = Query(None, alias="topBench"),
+    include_details: bool | None = Query(None, alias="includeDetails"),
+    bench_limit: int | None = Query(None, alias="benchLimit"),
     manager: ContextManager = Depends(get_context_manager),
 ) -> TradeFindResponse:
+    if payload is None:
+        if team_a is None or team_b is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="teamA and teamB are required",
+            )
+        data: Dict[str, object] = {
+            "team_a": team_a,
+            "team_b": team_b,
+        }
+        if max_players is not None:
+            data["max_players"] = max_players
+        if player_pool is not None:
+            data["player_pool"] = player_pool
+        if top_results is not None:
+            data["top_results"] = top_results
+        if top_bench is not None:
+            data["top_bench"] = top_bench
+        if include_details is not None:
+            data["include_details"] = include_details
+        if bench_limit is not None:
+            data["bench_limit"] = bench_limit
+        payload = TradeFindRequest(**data)
+
     ctx = manager.get()
     finder = _instantiate_finder(ctx)
 
