@@ -6,9 +6,7 @@ info:
     REST interface for the PFF Fantasy League toolkit. All requests must include
     the header `X-API-Key` matching the `PFF_API_KEY` environment variable.
 servers:
-  - url: https://api.example.com
-    description: Production
-  - url: http://localhost:8000
+  - url: https://pff-fantasy-analyzer.onrender.com/
     description: Local development
 components:
   securitySchemes:
