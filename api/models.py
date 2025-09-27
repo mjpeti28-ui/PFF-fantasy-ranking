@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -334,3 +335,33 @@ class DataTableResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class JobStatus(str, Enum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class JobInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(..., alias="jobId")
+    job_type: str = Field(..., alias="jobType")
+    status: JobStatus
+    created_at: datetime = Field(..., alias="createdAt")
+    started_at: Optional[datetime] = Field(default=None, alias="startedAt")
+    finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class JobCreatedResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(..., alias="jobId")
+    status: JobStatus
+    job_type: str = Field(..., alias="jobType")
+    poll_url: str = Field(..., alias="pollUrl")

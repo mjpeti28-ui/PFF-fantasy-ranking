@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, status
 
 from context import ContextManager, context_manager
+from api.background import JobManager, job_manager
 
 
 class APISettings:
@@ -35,3 +36,7 @@ async def require_api_key(
 
 def get_context_manager() -> ContextManager:
     return context_manager
+
+
+def get_job_manager() -> JobManager:
+    return job_manager

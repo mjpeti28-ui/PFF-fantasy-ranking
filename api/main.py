@@ -6,6 +6,7 @@ from api.routes import (
     config,
     evaluate,
     health,
+    jobs,
     league,
     players,
     rankings,
@@ -30,6 +31,7 @@ app.include_router(teams.router)
 app.include_router(top.router)
 app.include_router(trade.router)
 app.include_router(waivers.router)
+app.include_router(jobs.router)
 
 
 @app.get("/", summary="Root endpoint", tags=["health"])

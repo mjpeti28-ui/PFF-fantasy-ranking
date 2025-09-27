@@ -472,6 +472,30 @@ components:
         total: {type: integer}
         limit: {type: integer}
         offset: {type: integer}
+    JobStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+    JobInfo:
+      type: object
+      properties:
+        jobId: {type: string}
+        jobType: {type: string}
+        status: {$ref: '#/components/schemas/JobStatus'}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time, nullable: true}
+        finishedAt: {type: string, format: date-time, nullable: true}
+        result: {type: object, nullable: true}
+        error: {type: string, nullable: true}
+        metadata: {type: object}
+      required: [jobId, jobType, status, createdAt, metadata]
+    JobCreatedResponse:
+      type: object
+      properties:
+        jobId: {type: string}
+        jobType: {type: string}
+        status: {$ref: '#/components/schemas/JobStatus'}
+        pollUrl: {type: string}
+      required: [jobId, jobType, status, pollUrl]
 paths:
   /healthz:
     get:
@@ -772,6 +796,11 @@ paths:
           in: query
           required: false
           schema: {type: integer, minimum: 0}
+        - name: runAsync
+          in: query
+          required: false
+          description: Force the search to run as a background job. The API will return a 202 with a jobId.
+          schema: {type: boolean}
       description: |
         Provide parameters via query string or submit the JSON body described by `TradeFindRequest`.
         When using query parameters, at minimum `teamA` and `teamB` must be supplied.
@@ -782,6 +811,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TradeFindResponse'
+        '202':
+          description: Search accepted for asynchronous processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreatedResponse'
   /waivers/candidates:
     get:
       tags: [waivers]
@@ -967,5 +1002,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerListResponse'
+  /jobs/{jobId}:
+    get:
+      tags: [jobs]
+      summary: Fetch background job status
+      operationId: getJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobInfo'
+        '404':
+          description: Job not found
 security:
   - ApiKeyAuth: []
