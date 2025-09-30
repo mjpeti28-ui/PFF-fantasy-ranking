@@ -560,6 +560,7 @@ paths:
       tags: [health]
       summary: Health check
       operationId: healthcheck
+      x-openai-isConsequential: false
       responses:
         '200':
           description: OK
@@ -575,6 +576,7 @@ paths:
       tags: [config]
       summary: Get configuration knobs
       operationId: getConfig
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Current settings
@@ -586,6 +588,7 @@ paths:
       tags: [config]
       summary: Update configuration knobs
       operationId: patchConfig
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -604,6 +607,7 @@ paths:
       tags: [config]
       summary: Describe configuration knobs
       operationId: configHelp
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Help text for each knob
@@ -616,6 +620,7 @@ paths:
       tags: [league]
       summary: League metadata
       operationId: getLeague
+      x-openai-isConsequential: false
       responses:
         '200':
           description: League metadata
@@ -629,6 +634,7 @@ paths:
       summary: Reload league data files
       description: Validate and reload CSV inputs. Invalid paths return 400.
       operationId: reloadLeague
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -652,6 +658,7 @@ paths:
       tags: [players]
       summary: Search players
       operationId: listPlayers
+      x-openai-isConsequential: false
       parameters:
         - name: pos
           in: query
@@ -690,6 +697,7 @@ paths:
       tags: [players]
       summary: Player detail
       operationId: getPlayer
+      x-openai-isConsequential: false
       parameters:
         - name: player_id
           in: path
@@ -708,6 +716,7 @@ paths:
       tags: [players]
       summary: Compare multiple players across datasets
       operationId: comparePlayers
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -731,6 +740,7 @@ paths:
       tags: [players]
       summary: Rankings view
       operationId: getRankings
+      x-openai-isConsequential: false
       parameters:
         - name: pos
           in: query
@@ -760,6 +770,7 @@ paths:
       tags: [teams]
       summary: List teams
       operationId: listTeams
+      x-openai-isConsequential: false
       responses:
         '200':
           description: Team names
@@ -773,6 +784,7 @@ paths:
       tags: [teams]
       summary: Team detail
       operationId: getTeam
+      x-openai-isConsequential: false
       parameters:
         - name: team
           in: path
@@ -794,6 +806,7 @@ paths:
         Submit an `EvaluateRequest` JSON body to tweak knobs and hypothetical rosters. For convenience,
         `includeDetails` and `benchLimit` may also be supplied as query parameters when you only need
         to toggle those flags.
+      x-openai-isConsequential: false
       requestBody:
         content:
           application/json:
@@ -820,6 +833,7 @@ paths:
       tags: [trade]
       summary: Evaluate trade proposal
       operationId: evaluateTrade
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -850,6 +864,7 @@ paths:
         Submit a JSON body described by `TradeFindRequest`. For quick ad-hoc usage you may also pass
         the same fields as query parameters (teamA, teamB, maxPlayers, playerPool, topResults,
         topBench, includeDetails, benchLimit, runAsync), but the canonical contract uses the JSON body.
+      x-openai-isConsequential: false
       requestBody:
         required: false
         description: Use a JSON payload when you want to control multiple search knobs (fairness weights, narrative toggles, etc.).
@@ -886,6 +901,7 @@ paths:
       tags: [waivers]
       summary: List waiver candidates
       operationId: waiverCandidates
+      x-openai-isConsequential: false
       parameters:
         - name: team
           in: query
@@ -913,6 +929,7 @@ paths:
       tags: [waivers]
       summary: Evaluate add/drop scenarios
       operationId: waiverRecommend
+      x-openai-isConsequential: false
       requestBody:
         required: true
         content:
@@ -938,6 +955,7 @@ paths:
       tags: [stats]
       summary: Query statistical dataset
       operationId: queryStats
+      x-openai-isConsequential: false
       parameters:
         - name: dataset
           in: path
@@ -978,6 +996,7 @@ paths:
       tags: [sources]
       summary: Query projections CSV
       operationId: getProjectionsSource
+      x-openai-isConsequential: false
       parameters:
         - name: filters
           in: query
@@ -1011,6 +1030,7 @@ paths:
       tags: [sources]
       summary: Query rankings dataset
       operationId: getRankingsSource
+      x-openai-isConsequential: false
       parameters:
         - name: filters
           in: query
@@ -1044,6 +1064,7 @@ paths:
       tags: [players]
       summary: Simple top-N players view
       operationId: topPlayers
+      x-openai-isConsequential: false
       parameters:
         - name: pos
           in: query
@@ -1071,6 +1092,7 @@ paths:
       tags: [jobs]
       summary: Fetch background job status
       operationId: getJob
+      x-openai-isConsequential: false
       parameters:
         - name: jobId
           in: path
