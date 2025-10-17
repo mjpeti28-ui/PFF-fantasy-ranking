@@ -1,11 +1,13 @@
 import math
 import statistics as stats
 from bisect import bisect_left, bisect_right
-from collections import Counter
-from typing import Dict, List, Tuple, Optional
+from collections import Counter, defaultdict
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from config import SCORABLE_POS, settings
+
+from config import SCORABLE_POS, SLOT_DEFS, settings
 
 
 def _build_monotone_cubic_spline(x: np.ndarray, y: np.ndarray) -> Dict[str, np.ndarray]:
@@ -317,3 +319,204 @@ def leaderboards(
     combined_board = sorted(combined.items(), key=lambda x: x[1], reverse=True)
 
     return starters_board, bench_board, combined_board, combined
+
+
+def _build_zero_sum_group(values: Dict[str, float], teams: List[str]) -> Dict[str, Any]:
+    total = float(sum(values.get(team, 0.0) for team in teams))
+    count = len(teams)
+    baseline = total / count if count else 0.0
+    entries: List[Dict[str, Any]] = []
+    for team in teams:
+        val = float(values.get(team, 0.0))
+        share = (val / total) if total else 0.0
+        surplus = val - baseline
+        entries.append(
+            {
+                "team": team,
+                "value": val,
+                "share": share,
+                "surplus": surplus,
+            }
+        )
+    entries.sort(key=lambda item: item["surplus"], reverse=True)
+    surplus_sum = sum(entry["surplus"] for entry in entries)
+    share_sum = sum(entry["share"] for entry in entries)
+    return {
+        "total": total,
+        "baseline": baseline,
+        "entries": entries,
+        "surplusSum": surplus_sum,
+        "shareSum": share_sum,
+    }
+
+
+def compute_zero_sum_view(
+    starters_totals: Dict[str, float],
+    bench_totals: Dict[str, float],
+    *,
+    combined_starters_weight: float,
+    combined_bench_weight: float,
+    team_results: Dict[str, Dict],
+    replacement_points: Dict[str, float],
+    bench_tables: Dict[str, List[Dict]],
+) -> Dict[str, Any]:
+    teams = list(starters_totals.keys())
+
+    starters_group = _build_zero_sum_group(starters_totals, teams)
+    bench_group = _build_zero_sum_group(bench_totals, teams)
+
+    combined_values = {
+        team: (combined_starters_weight * float(starters_totals.get(team, 0.0)))
+        + (combined_bench_weight * float(bench_totals.get(team, 0.0)))
+        for team in teams
+    }
+    combined_group = _build_zero_sum_group(combined_values, teams)
+    combined_group["weights"] = {
+        "starters": combined_starters_weight,
+        "bench": combined_bench_weight,
+    }
+
+    position_groups: Dict[str, Dict[str, float]] = {pos: {team: 0.0 for team in teams} for pos in SCORABLE_POS}
+    bench_position_groups: Dict[str, Dict[str, float]] = {pos: {team: 0.0 for team in teams} for pos in SCORABLE_POS}
+    slot_names = [slot for slot, _ in SLOT_DEFS]
+    slot_groups: Dict[str, Dict[str, float]] = {slot: {team: 0.0 for team in teams} for slot in slot_names}
+    flex_slots = {slot for slot, eligible in SLOT_DEFS if len(eligible) > 1}
+    flex_totals: Dict[str, float] = {team: 0.0 for team in teams}
+
+    for team in teams:
+        team_starters = team_results.get(team, {}).get("starters", [])
+        for starter in team_starters:
+            pos = starter.get("pos")
+            if pos not in SCORABLE_POS:
+                continue
+            proj = starter.get("proj")
+            repl = replacement_points.get(pos, 0.0)
+            if proj is None:
+                proj = repl
+            vor = float(proj) - float(repl)
+            position_groups[pos][team] += vor
+            slot_name = starter.get("slot")
+            if slot_name not in slot_groups:
+                slot_groups[slot_name] = {t: 0.0 for t in teams}
+            slot_groups[slot_name][team] += vor
+            if slot_name in flex_slots:
+                flex_totals[team] += vor
+
+        bench_rows = bench_tables.get(team, [])
+        for bench in bench_rows:
+            pos = bench.get("pos")
+            if pos not in SCORABLE_POS:
+                continue
+            bench_score = bench.get("BenchScore")
+            if bench_score is None:
+                bench_score = bench.get("vor")
+            bench_position_groups[pos][team] += float(bench_score or 0.0)
+
+    position_ledgers = {
+        pos: _build_zero_sum_group(values, teams)
+        for pos, values in position_groups.items()
+        if any(values.get(team, 0.0) for team in teams)
+    }
+
+    bench_position_ledgers = {
+        pos: _build_zero_sum_group(values, teams)
+        for pos, values in bench_position_groups.items()
+        if any(values.get(team, 0.0) for team in teams)
+    }
+
+    slot_ledgers = {
+        slot: _build_zero_sum_group(values, teams)
+        for slot, values in slot_groups.items()
+        if any(values.get(team, 0.0) for team in teams)
+    }
+
+    flex_ledger = _build_zero_sum_group(flex_totals, teams) if any(flex_totals.values()) else {}
+
+    def _entries_map(group: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
+        entries = group.get("entries", []) if isinstance(group, dict) else []
+        return {entry.get("team"): entry for entry in entries}
+
+    analytics: Dict[str, Any] = {"teams": {}, "league": {}}
+    position_deficits = defaultdict(float)
+    starter_entry_maps = {pos: _entries_map(ledger) for pos, ledger in position_ledgers.items()}
+    bench_entry_maps = {pos: _entries_map(ledger) for pos, ledger in bench_position_ledgers.items()}
+    slot_entry_maps = {slot: _entries_map(ledger) for slot, ledger in slot_ledgers.items()}
+    flex_entry_map = _entries_map(flex_ledger) if flex_ledger else {}
+
+    for team in teams:
+        scarcity_metrics: Dict[str, Dict[str, float]] = {}
+        for pos, ledger in position_ledgers.items():
+            baseline = float(ledger.get("baseline", 0.0))
+            entry = starter_entry_maps[pos].get(team)
+            if entry is None:
+                continue
+            value = float(entry.get("value", 0.0))
+            deficit = baseline - value
+            if deficit > 0:
+                pressure = (deficit / baseline) if baseline else 0.0
+                scarcity_metrics[pos] = {
+                    "deficit": round(deficit, 4),
+                    "pressure": round(pressure, 4),
+                }
+                position_deficits[pos] += deficit
+
+        starter_shares = {
+            pos: float(starter_entry_maps[pos][team].get("share", 0.0))
+            for pos in starter_entry_maps
+            if starter_entry_maps[pos].get(team) is not None
+        }
+        bench_shares = {
+            pos: float(bench_entry_maps[pos][team].get("share", 0.0))
+            for pos in bench_entry_maps
+            if bench_entry_maps[pos].get(team) is not None
+        }
+        slot_shares = {
+            slot: float(slot_entry_maps[slot][team].get("share", 0.0))
+            for slot in slot_entry_maps
+            if slot_entry_maps[slot].get(team) is not None
+        }
+        flex_share = float(flex_entry_map.get(team, {}).get("share", 0.0)) if flex_ledger else 0.0
+
+        risk_starters = sum(share ** 2 for share in starter_shares.values())
+        risk_bench = sum(share ** 2 for share in bench_shares.values())
+        risk_slots = sum(share ** 2 for share in slot_shares.values())
+
+        analytics["teams"][team] = {
+            "scarcityPressure": scarcity_metrics,
+            "concentrationRisk": {
+                "starterPositions": {k: round(v, 4) for k, v in starter_shares.items()},
+                "benchPositions": {k: round(v, 4) for k, v in bench_shares.items()},
+                "slotShares": {k: round(v, 4) for k, v in slot_shares.items()},
+                "flexShare": round(flex_share, 4),
+                "herfindahl": {
+                    "starters": round(risk_starters, 4),
+                    "bench": round(risk_bench, 4),
+                    "slots": round(risk_slots, 4),
+                },
+            },
+        }
+
+    if position_deficits:
+        sorted_pressure = sorted(position_deficits.items(), key=lambda item: item[1], reverse=True)
+        analytics["league"]["highPressurePositions"] = [
+            {"position": pos, "aggregateDeficit": round(value, 4)} for pos, value in sorted_pressure
+        ]
+
+    return {
+        "teamCount": len(teams),
+        "starters": starters_group,
+        "bench": bench_group,
+        "combined": combined_group,
+        "positions": position_ledgers,
+        "benchPositions": bench_position_ledgers,
+        "slots": slot_ledgers,
+        "flex": flex_ledger,
+        "analytics": analytics,
+    }
+    return {
+        "teamCount": len(teams),
+        "starters": starters_group,
+        "bench": bench_group,
+        "combined": combined_group,
+        "positions": position_ledgers,
+    }

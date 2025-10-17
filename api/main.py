@@ -16,6 +16,7 @@ from api.routes import (
     top,
     trade,
     waivers,
+    zero_sum,
 )
 
 app = FastAPI(title="PFF Fantasy League API", version="0.1.0")
@@ -32,6 +33,7 @@ app.include_router(top.router)
 app.include_router(trade.router)
 app.include_router(waivers.router)
 app.include_router(jobs.router)
+app.include_router(zero_sum.router)
 
 
 @app.get("/", summary="Root endpoint", tags=["health"])

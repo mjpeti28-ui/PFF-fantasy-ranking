@@ -145,6 +145,102 @@ class TeamDetail(BaseModel):
     bench_limit: Optional[int] = Field(default=None, alias="benchLimit")
 
 
+class ZeroSumEntry(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team: str
+    value: float
+    share: float
+    surplus: float
+
+
+class ZeroSumGroup(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    total: float
+    baseline: float
+    share_sum: float = Field(..., alias="shareSum")
+    surplus_sum: float = Field(..., alias="surplusSum")
+    entries: List[ZeroSumEntry]
+
+
+class ZeroSumCombinedGroup(ZeroSumGroup):
+    weights: Dict[str, float]
+
+
+class ZeroSumScarcityMetric(BaseModel):
+    deficit: float
+    pressure: float
+
+
+class ZeroSumHerfindahl(BaseModel):
+    starters: float = 0.0
+    bench: float = 0.0
+    slots: float = 0.0
+
+
+class ZeroSumConcentrationRisk(BaseModel):
+    starter_positions: Dict[str, float] = Field(default_factory=dict, alias="starterPositions")
+    bench_positions: Dict[str, float] = Field(default_factory=dict, alias="benchPositions")
+    slot_shares: Dict[str, float] = Field(default_factory=dict, alias="slotShares")
+    flex_share: float = Field(default=0.0, alias="flexShare")
+    herfindahl: ZeroSumHerfindahl = Field(default_factory=ZeroSumHerfindahl)
+
+
+class ZeroSumTeamAnalytics(BaseModel):
+    scarcity_pressure: Dict[str, ZeroSumScarcityMetric] = Field(default_factory=dict, alias="scarcityPressure")
+    concentration_risk: ZeroSumConcentrationRisk = Field(alias="concentrationRisk")
+
+
+class ZeroSumAnalyticsLeagueEntry(BaseModel):
+    position: str
+    aggregate_deficit: float = Field(..., alias="aggregateDeficit")
+
+
+class ZeroSumAnalyticsLeague(BaseModel):
+    high_pressure_positions: List[ZeroSumAnalyticsLeagueEntry] = Field(default_factory=list, alias="highPressurePositions")
+
+
+class ZeroSumAnalytics(BaseModel):
+    teams: Dict[str, ZeroSumTeamAnalytics] = Field(default_factory=dict)
+    league: ZeroSumAnalyticsLeague = Field(default_factory=ZeroSumAnalyticsLeague)
+
+
+class ZeroSumResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team_count: int = Field(..., alias="teamCount")
+    starters: ZeroSumGroup
+    bench: ZeroSumGroup
+    combined: ZeroSumCombinedGroup
+    positions: Dict[str, ZeroSumGroup] = Field(default_factory=dict)
+    bench_positions: Dict[str, ZeroSumGroup] = Field(default_factory=dict, alias="benchPositions")
+    slots: Dict[str, ZeroSumGroup] = Field(default_factory=dict)
+    flex: Optional[ZeroSumGroup] = None
+    analytics: ZeroSumAnalytics = Field(default_factory=ZeroSumAnalytics)
+
+
+class ZeroSumShiftMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    share_delta: float = Field(..., alias="shareDelta")
+    surplus_delta: float = Field(..., alias="surplusDelta")
+    value_delta: float = Field(..., alias="valueDelta")
+
+
+class ZeroSumShift(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    combined: Dict[str, ZeroSumShiftMetrics] = Field(default_factory=dict)
+    starters: Dict[str, ZeroSumShiftMetrics] = Field(default_factory=dict)
+    bench: Dict[str, ZeroSumShiftMetrics] = Field(default_factory=dict)
+    positions: Dict[str, Dict[str, ZeroSumShiftMetrics]] = Field(default_factory=dict)
+    bench_positions: Dict[str, Dict[str, ZeroSumShiftMetrics]] = Field(default_factory=dict, alias="benchPositions")
+    slots: Dict[str, Dict[str, ZeroSumShiftMetrics]] = Field(default_factory=dict)
+    flex: Dict[str, ZeroSumShiftMetrics] = Field(default_factory=dict)
+    summary: Dict[str, Any] = Field(default_factory=dict)
+
+
 class EvaluateResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -156,7 +252,24 @@ class EvaluateResponse(BaseModel):
     replacement_points: Dict[str, float] = Field(..., alias="replacementPoints")
     replacement_targets: Dict[str, float] = Field(..., alias="replacementTargets")
     scarcity_samples: Dict[str, List[Dict[str, Any]]] = Field(default_factory=dict, alias="scarcitySamples")
+    zero_sum: ZeroSumResponse = Field(..., alias="zeroSum")
     details: Optional[List[TeamDetail]] = None
+
+
+class EvaluateDeltaSnapshot(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    teams: List[TeamEvaluation]
+    zero_sum: ZeroSumResponse = Field(..., alias="zeroSum")
+
+
+class EvaluateDeltaResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    evaluated_at: datetime = Field(..., alias="evaluatedAt")
+    baseline: EvaluateDeltaSnapshot
+    scenario: EvaluateDeltaSnapshot
+    zero_sum_shift: ZeroSumShift = Field(..., alias="zeroSumShift")
 
 
 class TradePiece(BaseModel):
@@ -196,6 +309,9 @@ class TradeEvaluateResponse(BaseModel):
     replacement_targets: Dict[str, float] = Field(..., alias="replacementTargets")
     starter_vor: Dict[str, float] = Field(..., alias="starterVOR")
     bench_totals: Dict[str, float] = Field(..., alias="benchTotals")
+    zero_sum_before: ZeroSumResponse = Field(..., alias="zeroSumBefore")
+    zero_sum_after: ZeroSumResponse = Field(..., alias="zeroSumAfter")
+    zero_sum_shift: ZeroSumShift = Field(..., alias="zeroSumShift")
     leaderboards: Dict[str, List[LeaderboardEntry]]
     details: Optional[List[TeamDetail]] = None
 
@@ -265,6 +381,31 @@ class TradeFindResponse(BaseModel):
     evaluated_at: datetime = Field(..., alias="evaluatedAt")
     baseline_combined: Dict[str, float] = Field(..., alias="baselineCombined")
     proposals: List[TradeProposal]
+
+
+class TeamLeverageResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team: str
+    combined: ZeroSumEntry
+    starters: ZeroSumEntry
+    bench: ZeroSumEntry
+    positions: Dict[str, ZeroSumEntry] = Field(default_factory=dict)
+    bench_positions: Dict[str, ZeroSumEntry] = Field(default_factory=dict, alias="benchPositions")
+    slots: Dict[str, ZeroSumEntry] = Field(default_factory=dict)
+    scarcity_pressure: Dict[str, ZeroSumScarcityMetric] = Field(default_factory=dict, alias="scarcityPressure")
+    concentration_risk: ZeroSumConcentrationRisk = Field(alias="concentrationRisk")
+    leverage_positions: List[str] = Field(default_factory=list, alias="leveragePositions")
+    need_positions: List[str] = Field(default_factory=list, alias="needPositions")
+
+
+class ZeroSumPositionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    position: str
+    starters: ZeroSumGroup
+    bench: Optional[ZeroSumGroup] = None
+    analytics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class WaiverCandidate(BaseModel):

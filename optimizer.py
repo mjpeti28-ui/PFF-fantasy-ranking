@@ -70,8 +70,13 @@ def optimize_lineups_first_pass(rosters, alias_map, rank_by_name, pos_by_name, p
         best = dfs_pick(plist, SLOT_DEFS)
         if best["assign"] is None:
             raise RuntimeError(f"Could not build a valid lineup for team {team}.")
-        starters = [plist[i] for i in best["assign"]]
-        bench = [p for j,p in enumerate(plist) if j not in set(best["assign"])]
+        assigned = set(best["assign"])
+        starters = []
+        for slot_idx, player_idx in enumerate(best["assign"]):
+            player_entry = dict(plist[player_idx])
+            player_entry["slot"] = SLOT_DEFS[slot_idx][0]
+            starters.append(player_entry)
+        bench = [dict(p) for j, p in enumerate(plist) if j not in assigned]
         results[team] = {"starters": starters, "bench": bench}
     return results
 
@@ -115,7 +120,12 @@ def optimize_lineups_second_pass(rosters, alias_map, rank_by_name, pos_by_name, 
     for team, td in rosters.items():
         plist = build_team_players_final(td, alias_map, rank_by_name, pos_by_name, posrank_by_name, proj_by_name, worst_starter_overall, worst_starter_posrank)
         best = dfs_pick(plist, SLOT_DEFS)
-        starters = [plist[i] for i in best["assign"]]
-        bench = [p for j,p in enumerate(plist) if j not in set(best["assign"])]
+        assigned = set(best["assign"])
+        starters = []
+        for slot_idx, player_idx in enumerate(best["assign"]):
+            player_entry = dict(plist[player_idx])
+            player_entry["slot"] = SLOT_DEFS[slot_idx][0]
+            starters.append(player_entry)
+        bench = [dict(p) for j, p in enumerate(plist) if j not in assigned]
         results[team] = {"starters": starters, "bench": bench}
     return results

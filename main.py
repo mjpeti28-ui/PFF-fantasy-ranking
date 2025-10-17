@@ -15,8 +15,15 @@ from optimizer import (
 )
 from alias import build_alias_map
 from scoring import (
-    starter_values, replacement_counts, replacement_points, compute_worst_bench_bounds,
-    bench_generous_finalize, bench_tables, leaderboards, build_scarcity_curves
+    starter_values,
+    replacement_counts,
+    replacement_points,
+    compute_worst_bench_bounds,
+    bench_generous_finalize,
+    bench_tables,
+    leaderboards,
+    build_scarcity_curves,
+    compute_zero_sum_view,
 )
 from config import PROJECTIONS_CSV, settings
 
@@ -87,6 +94,52 @@ def print_team_bench(team, rows, topN=None, bench_beta: float | None = None):
         posrank_s = f"{str(posrank):>8}"
         print(f"{r['name']:<26} {r['pos']:<4} {proj_s} {vor_s} {ovar_s} {rank_s} {posrank_s} {r['BenchScore']:>11.2f}")
     print()
+
+
+def print_zero_sum_group(title, group):
+    entries = group.get("entries", [])
+    if not entries:
+        return
+    total = group.get("total", 0.0)
+    baseline = group.get("baseline", 0.0)
+    surplus_sum = group.get("surplusSum", 0.0)
+    share_sum = group.get("shareSum", 0.0)
+    print(title)
+    hr()
+    print(f"{'Team':<28} {'Value':>10} {'Share%':>8} {'Surplus':>10}")
+    hr("—", 80)
+    for entry in entries:
+        share_pct = entry.get("share", 0.0) * 100.0
+        print(
+            f"{entry['team']:<28} "
+            f"{entry.get('value', 0.0):>10.2f} "
+            f"{share_pct:>7.2f}% "
+            f"{entry.get('surplus', 0.0):>10.2f}"
+        )
+    print(
+        f"Total={total:.2f}  Baseline={baseline:.2f}  "
+        f"ShareΣ={share_sum:.3f}  SurplusΣ={surplus_sum:.4f}"
+    )
+    print()
+
+
+def print_zero_sum_section(zero_sum):
+    if not zero_sum:
+        return
+    combined = zero_sum.get("combined", {})
+    weights = combined.get("weights", {})
+    w_s = weights.get("starters")
+    w_b = weights.get("bench")
+    title = "Zero-Sum Combined Ledger"
+    if w_s is not None and w_b is not None:
+        title += f" (weights starters={w_s:.2f} bench={w_b:.2f})"
+    print_zero_sum_group(title, combined)
+    print_zero_sum_group("Zero-Sum Starter Ledger", zero_sum.get("starters", {}))
+    print_zero_sum_group("Zero-Sum Bench Ledger", zero_sum.get("bench", {}))
+
+    positions = zero_sum.get("positions", {})
+    for pos, group in sorted(positions.items()):
+        print_zero_sum_group(f"Zero-Sum {pos} Starter Ledger", group)
 
 
 def print_projection_sample(df, count=10):
@@ -220,6 +273,16 @@ def evaluate_league(
         bench_percentile_clamp=bench_percentile_clamp,
     )
 
+    zero_sum_view = compute_zero_sum_view(
+        starters_totals,
+        bench_totals,
+        combined_starters_weight=combined_starters_weight,
+        combined_bench_weight=combined_bench_weight,
+        team_results=results,
+        replacement_points=repl_points,
+        bench_tables=bench_tbls,
+    )
+
     settings_snapshot = {
         "projection_scale_beta": beta,
         "replacement_skip_pct": replacement_skip_pct,
@@ -249,6 +312,7 @@ def evaluate_league(
             "bench": bench_board,
             "combined": combined_board,
         },
+        "zero_sum": zero_sum_view,
         "combined_scores": combined_scores,
         "max_rank": max_rank,
         "scarcity_curves": scarcity_curves,
@@ -397,6 +461,8 @@ def main(rankings_path: str, projections_path: str | None = None, show_top_bench
         reverse=True,
         fmt=lambda v: f"{v:.3f}"
     )
+
+    print_zero_sum_section(league.get("zero_sum"))
 
     # Detailed team readouts (combined leaderboard order)
     bench_limit = None if show_top_bench is None or show_top_bench <= 0 else show_top_bench

@@ -9,7 +9,7 @@ from typing import Optional, Callable, List
 
 import atexit
 
-from config import PROJECTIONS_CSV, SCORABLE_POS
+from config import PROJECTIONS_CSV, SCORABLE_POS, settings
 from data import load_rankings, build_lookups, load_rosters
 from optimizer import (
     flatten_league_names,
@@ -27,6 +27,7 @@ from scoring import (
     bench_tables,
     leaderboards,
     build_scarcity_curves,
+    compute_zero_sum_view,
 )
 from main import (
     hr,
@@ -170,6 +171,8 @@ class TradeFinder:
         self.baseline_starter_proj = {}
         self.player_impacts: dict[str, dict[str, float]] = {}
         self.baseline_bench_vor: dict[str, dict[str, float]] = {}
+        self.combined_starters_weight = settings.get("combined_starters_weight")
+        self.combined_bench_weight = settings.get("combined_bench_weight")
 
         if build_baseline:
             self.baseline = self._evaluate(self.rosters, include_details=True)
@@ -620,8 +623,19 @@ class TradeFinder:
         bench_tbls, bench_totals = bench_tables(results, repl_points, self.max_rank)
         starters_board, bench_board, combined_board, combined_scores = leaderboards(starters_totals, bench_totals)
 
+        zero_sum = compute_zero_sum_view(
+            starters_totals,
+            bench_totals,
+            combined_starters_weight=self.combined_starters_weight,
+            combined_bench_weight=self.combined_bench_weight,
+            team_results=results,
+            replacement_points=repl_points,
+            bench_tables=bench_tbls,
+        )
+
         data = {
             "combined_scores": combined_scores,
+            "zero_sum": zero_sum,
         }
 
         if include_details:

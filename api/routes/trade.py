@@ -19,7 +19,13 @@ from api.models import (
     TradeProposal,
     TradeTeamResult,
 )
-from api.utils import build_leaderboards_map, build_team_details, coerce_float
+from api.utils import (
+    build_leaderboards_map,
+    build_team_details,
+    build_zero_sum_payload,
+    build_zero_sum_shift,
+    coerce_float,
+)
 from context import ContextManager
 from trading import TradeFinder
 from pydantic import ValidationError
@@ -203,6 +209,16 @@ async def evaluate_trade_endpoint(
         "combined": trade_data.get("combined_board", []),
     }
 
+    zero_sum_before_raw = baseline.get("zero_sum", {}) if baseline else {}
+    zero_sum_after_raw = trade_data.get("zero_sum", {})
+    zero_sum_before = build_zero_sum_payload(zero_sum_before_raw)
+    zero_sum_after = build_zero_sum_payload(zero_sum_after_raw)
+    zero_sum_shift = build_zero_sum_shift(
+        zero_sum_before_raw,
+        zero_sum_after_raw,
+        focus_teams=[payload.team_a, payload.team_b],
+    )
+
     evaluated_at = datetime.now(timezone.utc)
     return TradeEvaluateResponse(
         evaluated_at=evaluated_at,
@@ -212,6 +228,9 @@ async def evaluate_trade_endpoint(
         replacement_targets={k: coerce_float(v) for k, v in trade_data.get("replacement_targets", {}).items()},
         starter_vor={team: coerce_float(val) for team, val in trade_data.get("starter_vor", {}).items()},
         bench_totals={team: coerce_float(val) for team, val in trade_data.get("bench_totals", {}).items()},
+        zero_sum_before=zero_sum_before,
+        zero_sum_after=zero_sum_after,
+        zero_sum_shift=zero_sum_shift,
         leaderboards=build_leaderboards_map(leaderboards_raw),
         details=details_payload,
     )

@@ -56,7 +56,8 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
    - Bench scoring combines projection VOR and overall rank advantage (`BenchScore = VOR + beta * oVAR`).
    - Bench variance converts to z-scores or percentile z-scores once variance drops below `BENCH_Z_FALLBACK_THRESHOLD`.
 6. **Leaderboards and reporting (`main.py`, `reports.py`)**: Produce starter/bench/combined leaderboards, positional summaries, and optional Excel exports.
-7. **Expected points engine (`epw.py`)**: Distribute projection points across remaining weeks, blend with per-game stats, and adjust for strength of schedule to evaluate trades or EPW leaderboards.
+7. **Zero-sum ledgers (`scoring.py`, `main.py`)**: Convert starter/bench totals into share/surplus ledgers with positional, bench-positional, and slot-level breakdowns so you can audit opportunity cost or quantify leverage for upcoming moves.
+8. **Expected points engine (`epw.py`)**: Distribute projection points across remaining weeks, blend with per-game stats, and adjust for strength of schedule to evaluate trades or EPW leaderboards.
 
 ## Module Guide and Notable Heuristics
 - `config.py`: Central switchboard for fuzzy matching cutoffs, projection scaling, combined score weights, bench heuristics, and slot definitions. Adjust here before touching code.
@@ -64,7 +65,7 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - `data.py`: Normalizes name strings, merges projections, rescales ranks using a projection z-score multiplier, and exposes convenience lookups for ranks/positions.
 - `rosters.py`: Frozen league rosters partitioned by positional group; IR tags are preserved for UI context but stripped before scoring.
 - `optimizer.py`: Depth-first search lineup allocator with a two-pass safety net so missing ranks or projections never crash optimization.
-- `scoring.py`: Implements scarcity curves (monotone cubic splines), replacement-level search, bench generosity pass (adds +10 overall/+1 positional rank for missing bench data), percentile-based z-score fallback, and combined score weighting.
+- `scoring.py`: Implements scarcity curves (monotone cubic splines), replacement-level search, bench generosity pass (adds +10 overall/+1 positional rank for missing bench data), percentile-based z-score fallback, combined score weighting, and the zero-sum share/surplus ledgers (including bench-by-position, slot usage, flex aggregation, and analytics like scarcity pressure & concentration risk) surfaced by the CLI/API.
 - `reports.py`: Flattens results into `pandas` DataFrames, builds leaderboards, and writes Excel reports including methodology and replacement-level tabs.
 - `main.py`: Command-line entry point. Orchestrates the full evaluation pipeline, prints human-readable summaries, and exposes `evaluate_league` for downstream consumers.
 - `epw.py`: Expected-points simulator blending projections, historical stats, and SOS adjustments; supports full-league EPW summaries and trade deltas.
@@ -73,6 +74,7 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
   - Drop-tax penalties charge teams for cutting positive-VOR bench players.
   - Acceptance probability blends fairness, combined-score need, star-power inflow, and drop-tax friction.
   - Optional natural-language narratives summarize each side's gains.
+  - Trade evaluations surface zero-sum before/after ledgers with share deltas for both teams and key positions.
 - `streamlit_app.py`: Multi-tool UI wrapping trade finder, power rankings, simulation playground, add/drop impact, and manual trade analyzer. Archives inputs via `history_tracker` and caches simulation results with `SimulationStore`.
 - `simulation.py`: Batch runner for sweeping configuration spaces. Stores run metadata, raw team results, parameter grids, replacement levels, and scarcity samples with unique run IDs.
 - `history_tracker.py`: Lightweight content-addressable archive that snapshots input files when their hash changes.
@@ -80,7 +82,7 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 
 ## Interactive Toolkit Highlights
 - **Trade Finder** (`streamlit_app.py` → `trading.py`): Explore win-win packages with knobs for fairness mode, acceptance thresholds, drop-tax scaling, and narrative output.
-- **Power Rankings**: Replay the core model with different projection scaling, bench weights, scarcity sampling density, or EPW overlays.
+- **Power Rankings & Ledgers**: Replay the core model with different projection scaling, bench weights, scarcity sampling density, or EPW overlays, and audit zero-sum share/surplus ledgers (including bench-by-position and slot usage) to spot positional leverage.
 - **Simulation Playground** (`SimulationStore`): Sample hundreds of configurations, refine around high-variance settings, and visualize combined score distributions.
 - **Add/Drop Impact**: Mutate a single team's roster and instantly recompute league standings and bench depth.
 - **Trade Analyzer**: Manually select players from two teams and simulate post-trade combined scores and EPW trajectories.
@@ -92,8 +94,11 @@ The FastAPI layer (`api/`) currently exposes:
 - `GET /league`, `POST /league/reload` – metadata and data refresh.
 - `GET /players`, `GET /players/{player_id}` – search or inspect individual players.
 - `GET /rankings` – top-N lists by any metric.
-- `POST /evaluate` – run the full league evaluation (optionally returning starter/bench details).
+- `POST /evaluate` – run the full league evaluation (optionally returning starter/bench details) and receive the zero-sum ledger alongside classic leaderboards.
+- `POST /evaluate/delta` – compare baseline vs a hypothetical roster override; returns both zero-sum ledgers and shift summary (winners/losers).
 - `GET /teams`, `GET /teams/{team}` – list teams and inspect starters/bench makeup.
+- `GET /teams/{team}/leverage` – zero-sum leverage summary for a team (combined, positional, bench, slots, scarcity pressure, suggested pivots).
+- `GET /zero-sum/positions` – focus on a single position’s zero-sum ledger (starters + bench) with top holders and pressure callouts.
 - `GET /stats/{dataset}` – query raw stat tables (`passing`, `receiving_rushing`, etc.) with flexible filters/sorts.
 - `GET /sources/projections`, `GET /sources/rankings` – access upstream CSV feeds with arbitrary filtering/sorting.
 - `POST /trade/evaluate` – score a specific trade proposal.

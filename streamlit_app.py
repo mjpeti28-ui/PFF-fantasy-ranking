@@ -196,6 +196,114 @@ def bench_table(
     return df
 
 
+def zero_sum_group_to_dataframe(group: Dict[str, Any]) -> pd.DataFrame:
+    entries = group.get("entries", []) if isinstance(group, dict) else []
+    rows = []
+    for item in entries:
+        share = float(item.get("share", 0.0))
+        rows.append(
+            {
+                "Team": item.get("team"),
+                "Value": round(float(item.get("value", 0.0)), 2),
+                "Share (%)": round(share * 100.0, 2),
+                "Surplus": round(float(item.get("surplus", 0.0)), 2),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("Surplus", ascending=False).reset_index(drop=True)
+    return df
+
+
+def zero_sum_team_snapshot(zero_sum: Dict[str, Any], team: str) -> Dict[str, Dict[str, float]]:
+    snapshot: Dict[str, Dict[str, float]] = {}
+    for key in ("combined", "starters", "bench"):
+        group = zero_sum.get(key, {})
+        if not isinstance(group, dict):
+            continue
+        baseline = float(group.get("baseline", 0.0))
+        entries = group.get("entries", [])
+        entry = next((item for item in entries if item.get("team") == team), None)
+        if entry is None:
+            continue
+        snapshot[key] = {
+            "value": float(entry.get("value", 0.0)),
+            "share": float(entry.get("share", 0.0)),
+            "surplus": float(entry.get("surplus", 0.0)),
+            "baseline": baseline,
+        }
+    return snapshot
+
+
+def zero_sum_team_positions(zero_sum: Dict[str, Any], team: str) -> pd.DataFrame:
+    positions = zero_sum.get("positions", {}) if isinstance(zero_sum, dict) else {}
+    rows = []
+    for pos, group in positions.items():
+        entries = group.get("entries", []) if isinstance(group, dict) else []
+        entry = next((item for item in entries if item.get("team") == team), None)
+        if entry is None:
+            continue
+        share = float(entry.get("share", 0.0))
+        rows.append(
+            {
+                "Position": pos,
+                "Value": round(float(entry.get("value", 0.0)), 2),
+                "Share (%)": round(share * 100.0, 2),
+                "Surplus": round(float(entry.get("surplus", 0.0)), 2),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("Surplus", ascending=False).reset_index(drop=True)
+    return df
+
+
+def zero_sum_team_bench_positions(zero_sum: Dict[str, Any], team: str) -> pd.DataFrame:
+    bench_positions = zero_sum.get("benchPositions", {}) if isinstance(zero_sum, dict) else {}
+    rows = []
+    for pos, group in bench_positions.items():
+        entries = group.get("entries", []) if isinstance(group, dict) else []
+        entry = next((item for item in entries if item.get("team") == team), None)
+        if entry is None:
+            continue
+        share = float(entry.get("share", 0.0))
+        rows.append(
+            {
+                "Position": pos,
+                "Bench Score": round(float(entry.get("value", 0.0)), 2),
+                "Share (%)": round(share * 100.0, 2),
+                "Surplus": round(float(entry.get("surplus", 0.0)), 2),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("Surplus", ascending=False).reset_index(drop=True)
+    return df
+
+
+def zero_sum_team_slots(zero_sum: Dict[str, Any], team: str) -> pd.DataFrame:
+    slots = zero_sum.get("slots", {}) if isinstance(zero_sum, dict) else {}
+    rows = []
+    for slot, group in slots.items():
+        entries = group.get("entries", []) if isinstance(group, dict) else []
+        entry = next((item for item in entries if item.get("team") == team), None)
+        if entry is None:
+            continue
+        share = float(entry.get("share", 0.0))
+        rows.append(
+            {
+                "Slot": slot,
+                "Value": round(float(entry.get("value", 0.0)), 2),
+                "Share (%)": round(share * 100.0, 2),
+                "Surplus": round(float(entry.get("surplus", 0.0)), 2),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("Surplus", ascending=False).reset_index(drop=True)
+    return df
+
+
 def summary_table(
     starters_totals: Dict[str, float],
     starter_projections: Dict[str, float],
@@ -884,6 +992,234 @@ def render_power_rankings(teams: List[str]) -> None:
         league["combined_scores"],
     )
     st.dataframe(summary_df)
+
+    zero_sum = league.get("zero_sum", {})
+    combined_group = zero_sum.get("combined") if isinstance(zero_sum, dict) else None
+    if isinstance(combined_group, dict) and combined_group.get("entries"):
+        st.subheader("Zero-sum ledger insights")
+        weights = combined_group.get("weights", {})
+        baseline = combined_group.get("baseline", 0.0)
+        starter_w = float(weights.get("starters", 0.0))
+        bench_w = float(weights.get("bench", 0.0))
+        st.caption(
+            "Each ledger shows how much league-wide value a team captures relative to an equal share. "
+            "Surplus values are measured against the baseline per-team value "
+            f"(combined baseline ≈ {baseline:.2f}). "
+            f"Weights: starters={starter_w:.2f}, bench={bench_w:.2f}."
+        )
+
+        tab_combined, tab_starters, tab_bench, tab_positions, tab_bench_positions, tab_slots, tab_team = st.tabs(
+            [
+                "Combined (weighted ledger)",
+                "Starters",
+                "Bench",
+                "Positional lenses",
+                "Bench by position",
+                "Slot usage",
+                "Team drilldown",
+            ]
+        )
+
+        combined_df = zero_sum_group_to_dataframe(combined_group)
+        with tab_combined:
+            if combined_df.empty:
+                st.info("No zero-sum combined data available.")
+            else:
+                top_team = combined_df.iloc[0]
+                bottom_team = combined_df.iloc[-1]
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric(
+                    "Highest combined surplus",
+                    f"{top_team['Team']}",
+                    f"{top_team['Surplus']:+.2f}",
+                )
+                col_b.metric(
+                    "Largest combined deficit",
+                    f"{bottom_team['Team']}",
+                    f"{bottom_team['Surplus']:+.2f}",
+                )
+                share_delta = top_team["Share (%)"] - bottom_team["Share (%)"]
+                col_c.metric(
+                    "Share spread",
+                    f"{share_delta:.2f} pts",
+                    help="Difference between largest and smallest share of league value.",
+                )
+
+                chart_df = combined_df.copy()
+                chart = (
+                    alt.Chart(chart_df)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X("Surplus:Q", title="Surplus vs baseline"),
+                        y=alt.Y("Team:N", sort="-x"),
+                        color=alt.condition(
+                            alt.datum.Surplus >= 0,
+                            alt.value("#0E824E"),
+                            alt.value("#C72C41"),
+                        ),
+                        tooltip=["Team", "Value", "Share (%)", "Surplus"],
+                    )
+                )
+                st.altair_chart(chart, use_container_width=True)
+                st.dataframe(combined_df)
+
+        starters_group = zero_sum.get("starters", {}) if isinstance(zero_sum, dict) else {}
+        with tab_starters:
+            starters_df = zero_sum_group_to_dataframe(starters_group)
+            if starters_df.empty:
+                st.info("No starter ledger data available.")
+            else:
+                st.markdown("**Starter ledger** — surplus equals projected starter VOR captured beyond the league baseline.")
+                st.dataframe(starters_df)
+
+        bench_group = zero_sum.get("bench", {}) if isinstance(zero_sum, dict) else {}
+        with tab_bench:
+            bench_df = zero_sum_group_to_dataframe(bench_group)
+            if bench_df.empty:
+                st.info("No bench ledger data available.")
+            else:
+                st.markdown("**Bench ledger** — highlights how depth hoarding shifts the bench talent pool.")
+                st.dataframe(bench_df)
+
+        with tab_positions:
+            positions = zero_sum.get("positions", {}) if isinstance(zero_sum, dict) else {}
+            if not positions:
+                st.info("No positional ledger data available.")
+            else:
+                pos_choice = st.selectbox(
+                    "Position",
+                    sorted(positions.keys()),
+                    key="zero_sum_position",
+                )
+                pos_df = zero_sum_group_to_dataframe(positions.get(pos_choice, {}))
+                if pos_df.empty:
+                    st.info("No ledger entries for the selected position.")
+                else:
+                    st.markdown(
+                        f"**{pos_choice} ledger** — shows which teams are consuming the scarce {pos_choice} starter value."
+                    )
+                    st.dataframe(pos_df)
+
+        with tab_bench_positions:
+            bench_positions = zero_sum.get("benchPositions", {}) if isinstance(zero_sum, dict) else {}
+            if not bench_positions:
+                st.info("No bench-position ledger data available.")
+            else:
+                bench_pos_choice = st.selectbox(
+                    "Bench position",
+                    sorted(bench_positions.keys()),
+                    key="zero_sum_bench_position",
+                )
+                bench_pos_df = zero_sum_group_to_dataframe(bench_positions.get(bench_pos_choice, {}))
+                if bench_pos_df.empty:
+                    st.info("No bench ledger entries for the selected position.")
+                else:
+                    st.markdown(f"**Bench {bench_pos_choice} depth** — who controls bench value at this position.")
+                    st.dataframe(bench_pos_df)
+
+        with tab_slots:
+            slots = zero_sum.get("slots", {}) if isinstance(zero_sum, dict) else {}
+            if not slots:
+                st.info("No slot-level ledger data available.")
+            else:
+                slot_choice = st.selectbox(
+                    "Slot",
+                    sorted(slots.keys()),
+                    key="zero_sum_slot_choice",
+                )
+                slot_df = zero_sum_group_to_dataframe(slots.get(slot_choice, {}))
+                if slot_df.empty:
+                    st.info("No ledger entries for the selected slot.")
+                else:
+                    st.markdown(f"**{slot_choice} slot ledger** — value controlled in this lineup slot.")
+                    st.dataframe(slot_df)
+
+        with tab_team:
+            team_options = combined_df["Team"].tolist() if not combined_df.empty else list(league["results"].keys())
+            team_choice = st.selectbox(
+                "Team",
+                team_options,
+                key="zero_sum_team_choice",
+            )
+            snapshot = zero_sum_team_snapshot(zero_sum, team_choice)
+            if not snapshot:
+                st.info("No zero-sum snapshot available for the selected team.")
+            else:
+                col1, col2, col3 = st.columns(3)
+                cols = [col1, col2, col3]
+                for idx, (label, info) in enumerate(snapshot.items()):
+                    col = cols[idx] if idx < len(cols) else cols[-1]
+                    share_pct = info["share"] * 100.0
+                    col.metric(
+                        f"{label.title()} surplus",
+                        f"{info['value']:.2f}",
+                        f"{info['surplus']:+.2f}",
+                        help=f"Share: {share_pct:.2f}% | Baseline: {info['baseline']:.2f}",
+                    )
+                team_pos_df = zero_sum_team_positions(zero_sum, team_choice)
+                if team_pos_df.empty:
+                    st.caption("No positional breakdown available for this team.")
+                else:
+                    st.markdown("**Positional share** — which positions drive this team's leverage.")
+                    st.dataframe(team_pos_df)
+                    hottest = team_pos_df.iloc[0]
+                    st.caption(
+                        f"{team_choice} currently holds {hottest['Share (%)']:.2f}% of league {hottest['Position']} surplus "
+                        "— a strong bargaining chip in trades."
+                    )
+                bench_pos_df = zero_sum_team_bench_positions(zero_sum, team_choice)
+                if not bench_pos_df.empty:
+                    st.markdown("**Bench positional share** — bench depth concentration by position.")
+                    st.dataframe(bench_pos_df)
+                slot_df = zero_sum_team_slots(zero_sum, team_choice)
+                if not slot_df.empty:
+                    st.markdown("**Slot dominance** — starter value allocated by lineup slot.")
+                    st.dataframe(slot_df)
+                analytics_info = zero_sum.get("analytics", {}).get("teams", {}).get(team_choice, {}) if isinstance(zero_sum, dict) else {}
+                scarcity_metrics = analytics_info.get("scarcityPressure", {})
+                if scarcity_metrics:
+                    scarcity_df = pd.DataFrame(
+                        [
+                            {
+                                "Position": pos,
+                                "Deficit": round(metric.get("deficit", 0.0), 2),
+                                "Pressure": round(metric.get("pressure", 0.0), 3),
+                            }
+                            for pos, metric in scarcity_metrics.items()
+                        ]
+                    ).sort_values("Deficit", ascending=False)
+                    st.markdown("**Scarcity pressure** — deficits relative to league baseline.")
+                    st.dataframe(scarcity_df)
+                risk_metrics = analytics_info.get("concentrationRisk", {})
+                if risk_metrics:
+                    st.markdown("**Concentration risk**")
+                    risk_cols = st.columns(2)
+                    starter_risk = risk_metrics.get("starterPositions", {})
+                    bench_risk = risk_metrics.get("benchPositions", {})
+                    if starter_risk:
+                        risk_cols[0].metric("Starter Herfindahl", f"{risk_metrics.get('herfindahl', {}).get('starters', 0.0):.3f}")
+                    if bench_risk:
+                        risk_cols[1].metric("Bench Herfindahl", f"{risk_metrics.get('herfindahl', {}).get('bench', 0.0):.3f}")
+                    risk_tables = []
+                    if starter_risk:
+                        risk_tables.append(("Starter shares", starter_risk))
+                    if bench_risk:
+                        risk_tables.append(("Bench shares", bench_risk))
+                    slot_shares = risk_metrics.get("slotShares", {})
+                    if slot_shares:
+                        risk_tables.append(("Slot shares", slot_shares))
+                    for title, mapping in risk_tables:
+                        df = pd.DataFrame(
+                            [
+                                {"Key": key, "Share (%)": round(val * 100.0, 2)}
+                                for key, val in mapping.items()
+                            ]
+                        ).sort_values("Share (%)", ascending=False)
+                        st.markdown(f"**{title}**")
+                        st.dataframe(df)
+                    flex_share = risk_metrics.get("flexShare")
+                    if isinstance(flex_share, (int, float)):
+                        st.caption(f"Flex share: {flex_share * 100:.2f}% of league flex surplus.")
 
     st.subheader("Replacement baselines")
     replacement_df = pd.DataFrame(

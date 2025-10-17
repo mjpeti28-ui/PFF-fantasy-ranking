@@ -301,10 +301,211 @@ components:
               properties:
                 slot: {type: number}
                 projection: {type: number}
+        zeroSum:
+          $ref: '#/components/schemas/ZeroSumResponse'
         details:
           type: array
           items: {$ref: '#/components/schemas/TeamDetail'}
           nullable: true
+    ZeroSumEntry:
+      type: object
+      properties:
+        team: {type: string}
+        value: {type: number}
+        share: {type: number}
+        surplus: {type: number}
+      required: [team, value, share, surplus]
+    ZeroSumGroup:
+      type: object
+      properties:
+        total: {type: number}
+        baseline: {type: number}
+        shareSum: {type: number}
+        surplusSum: {type: number}
+        entries:
+          type: array
+          items: {$ref: '#/components/schemas/ZeroSumEntry'}
+      required: [total, baseline, shareSum, surplusSum, entries]
+    ZeroSumCombinedGroup:
+      allOf:
+        - $ref: '#/components/schemas/ZeroSumGroup'
+        - type: object
+          properties:
+            weights:
+              type: object
+              additionalProperties: {type: number}
+          required: [weights]
+    ZeroSumScarcityMetric:
+      type: object
+      properties:
+        deficit: {type: number}
+        pressure: {type: number}
+      required: [deficit, pressure]
+    ZeroSumConcentrationRisk:
+      type: object
+      properties:
+        starterPositions:
+          type: object
+          additionalProperties: {type: number}
+        benchPositions:
+          type: object
+          additionalProperties: {type: number}
+        slotShares:
+          type: object
+          additionalProperties: {type: number}
+        flexShare: {type: number}
+        herfindahl:
+          type: object
+          properties:
+            starters: {type: number}
+            bench: {type: number}
+            slots: {type: number}
+          additionalProperties: false
+      required: [starterPositions, benchPositions, slotShares, flexShare, herfindahl]
+    ZeroSumAnalyticsTeam:
+      type: object
+      properties:
+        scarcityPressure:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumScarcityMetric'}
+        concentrationRisk:
+          $ref: '#/components/schemas/ZeroSumConcentrationRisk'
+      required: [scarcityPressure, concentrationRisk]
+    ZeroSumAnalytics:
+      type: object
+      properties:
+        teams:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumAnalyticsTeam'}
+        league:
+          type: object
+          properties:
+            highPressurePositions:
+              type: array
+              items:
+                type: object
+                properties:
+                  position: {type: string}
+                  aggregateDeficit: {type: number}
+                required: [position, aggregateDeficit]
+          additionalProperties: false
+      required: [teams, league]
+    ZeroSumResponse:
+      type: object
+      properties:
+        teamCount: {type: integer}
+        starters: {$ref: '#/components/schemas/ZeroSumGroup'}
+        bench: {$ref: '#/components/schemas/ZeroSumGroup'}
+        combined: {$ref: '#/components/schemas/ZeroSumCombinedGroup'}
+        positions:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumGroup'}
+        benchPositions:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumGroup'}
+        slots:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumGroup'}
+        flex:
+          $ref: '#/components/schemas/ZeroSumGroup'
+          nullable: true
+        analytics:
+          $ref: '#/components/schemas/ZeroSumAnalytics'
+      required: [teamCount, starters, bench, combined, positions, benchPositions, slots, analytics]
+    ZeroSumShiftMetrics:
+      type: object
+      properties:
+        shareDelta: {type: number}
+        surplusDelta: {type: number}
+        valueDelta: {type: number}
+      required: [shareDelta, surplusDelta, valueDelta]
+    ZeroSumShift:
+      type: object
+      properties:
+        combined:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        starters:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        bench:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        positions:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        benchPositions:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        slots:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        flex:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumShiftMetrics'}
+        summary: {type: object}
+      required: [combined, starters, bench, positions, benchPositions, slots, flex, summary]
+    EvaluateDeltaSnapshot:
+      type: object
+      properties:
+        teams:
+          type: array
+          items: {$ref: '#/components/schemas/TeamEvaluation'}
+        zeroSum:
+          $ref: '#/components/schemas/ZeroSumResponse'
+      required: [teams, zeroSum]
+    EvaluateDeltaResponse:
+      type: object
+      properties:
+        evaluatedAt: {type: string, format: date-time}
+        baseline: {$ref: '#/components/schemas/EvaluateDeltaSnapshot'}
+        scenario: {$ref: '#/components/schemas/EvaluateDeltaSnapshot'}
+        zeroSumShift: {$ref: '#/components/schemas/ZeroSumShift'}
+      required: [evaluatedAt, baseline, scenario, zeroSumShift]
+    TeamLeverageResponse:
+      type: object
+      properties:
+        team: {type: string}
+        combined: {$ref: '#/components/schemas/ZeroSumEntry'}
+        starters: {$ref: '#/components/schemas/ZeroSumEntry'}
+        bench: {$ref: '#/components/schemas/ZeroSumEntry'}
+        positions:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumEntry'}
+        benchPositions:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumEntry'}
+        slots:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumEntry'}
+        scarcityPressure:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/ZeroSumScarcityMetric'}
+        concentrationRisk:
+          $ref: '#/components/schemas/ZeroSumConcentrationRisk'
+        leveragePositions:
+          type: array
+          items: {type: string}
+        needPositions:
+          type: array
+          items: {type: string}
+      required: [team, combined, starters, bench, positions, benchPositions, slots, scarcityPressure, concentrationRisk, leveragePositions, needPositions]
+    ZeroSumPositionResponse:
+      type: object
+      properties:
+        position: {type: string}
+        starters: {$ref: '#/components/schemas/ZeroSumGroup'}
+        bench:
+          $ref: '#/components/schemas/ZeroSumGroup'
+          nullable: true
+        analytics: {type: object}
+      required: [position, starters, analytics]
     TradePiece:
       type: object
       properties:
@@ -354,6 +555,12 @@ components:
         benchTotals:
           type: object
           additionalProperties: {type: number}
+        zeroSumBefore:
+          $ref: '#/components/schemas/ZeroSumResponse'
+        zeroSumAfter:
+          $ref: '#/components/schemas/ZeroSumResponse'
+        zeroSumShift:
+          $ref: '#/components/schemas/ZeroSumShift'
         leaderboards:
           type: object
           additionalProperties:
@@ -797,6 +1004,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TeamDetail'
+  /teams/{team}/leverage:
+    get:
+      tags: [teams]
+      summary: Zero-sum leverage insight for a team
+      operationId: getTeamLeverage
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: team
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Zero-sum leverage snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamLeverageResponse'
   /evaluate:
     post:
       tags: [league]
@@ -825,9 +1051,51 @@ paths:
         '200':
           description: Evaluation result
           content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateResponse'
+  /evaluate/delta:
+    post:
+      tags: [league]
+      summary: Compare baseline and modified rosters
+      operationId: evaluateLeagueDelta
+      description: |
+        Run two evaluations (baseline vs. hypothetical roster override) and return both results alongside
+        a zero-sum shift summary (share/surplus/value deltas with winners/losers callouts).
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateRequest'
+      responses:
+        '200':
+          description: Baseline and scenario comparison
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EvaluateResponse'
+                $ref: '#/components/schemas/EvaluateDeltaResponse'
+  /zero-sum/positions:
+    get:
+      tags: [zero-sum]
+      summary: Zero-sum ledger for a position
+      operationId: getZeroSumPosition
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: pos
+          in: query
+          required: true
+          schema: {type: string}
+          description: Position code (e.g., RB, WR, TE, QB).
+      responses:
+        '200':
+          description: Zero-sum ledger for the requested position
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZeroSumPositionResponse'
   /trade/evaluate:
     post:
       tags: [trade]

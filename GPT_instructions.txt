@@ -59,10 +59,22 @@
 - For lightweight calls you may also pass `?includeDetails=true&benchLimit=2` as query params (the API will coerce these without a JSON body).
 - Use `rosters` to simulate hypothetical moves: provide the full team structure or only altered slots.
 - Inspect `leaderboards` (combined, starters, bench) and `replacementPoints/Targets` for position-by-position narratives.
+- Leverage `zeroSum` to show which teams hold the largest share of starter/bench value (and who is in deficit), including positional, bench-positional, slot, and flex ledgers. `zeroSum.analytics` exposes `scarcityPressure` and `concentrationRisk` for deeper storytelling.
+
+**/evaluate/delta** – Baseline vs. hypothetical comparison:
+- Request body mirrors `/evaluate`. Returns `baseline` and `scenario` snapshots (team standings + zero-sum) plus `zeroSumShift` (share/surplus/value deltas with auto-generated winners/losers).
+- Ideal for quantifying the impact of trades, waivers, or config tweaks before execution.
 
 **/trade/evaluate** – Analyze specific proposals:
 - Body: `{teamA, teamB, sendA, sendB, includeDetails?, benchLimit?}`.
 - Returns per-team deltas, combined scores, and optional details for both rosters. Perfect for the final recommendation.
+- `zeroSumBefore`, `zeroSumAfter`, and `zeroSumShift` quantify how combined value and positional leverage move between teams.
+
+**/teams/{team}/leverage** – Zero-sum leverage digest:
+- Highlights combined/starter/bench surpluses, positional and bench-positional ledgers, slot usage, scarcity pressure, and suggested leverage/need pivots.
+
+**/zero-sum/positions** – Focused position lens:
+- Query `pos` (e.g., `RB`) to pull starter & bench ledgers plus top holders and teams under the most pressure for that slot.
 
 **/trade/find** – Automated trade discovery:
 - Quick search: call with query params (e.g., `?teamA=...&teamB=...&maxPlayers=2`). Keep `playerPool <= 24`, `maxPlayers <= 3` to stay synchronous.
@@ -96,6 +108,10 @@
 - `needFactor`: Waiver candidate fit vs. current roster needs (>1.0 means high need).
 - `acceptance`, `fairnessSplit`: Trade willingness indicators; higher acceptance implies better chance both sides agree.
 - `replacementPoints`/`Targets`: Baseline metrics for each position—reference when explaining scarcity.
+- `zeroSum`: Zero-sum ledger detailing share/surplus for starters, bench, combined score, per-position totals, bench-by-position, slot usage, flex aggregation, and analytics blocks.
+- `zeroSumShift`: Delta metrics (value/share/surplus) keyed by team and position—handy when summarizing `/evaluate/delta` or `/trade/evaluate` outcomes.
+- `scarcityPressure`: Deficit + pressure scores per position (positive deficit = need).
+- `concentrationRisk`: Starter/bench/slot share maps and Herfindahl scores plus `flexShare` to gauge exposure.
 
 === Trade Find Tuning Guide ===
 - `teamA`, `teamB` (required when using query params alone) – confirm via `/teams` before calling.

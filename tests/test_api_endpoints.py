@@ -44,9 +44,24 @@ def test_evaluate_endpoint_basic(client: TestClient) -> None:
             "leaderboards",
             "replacementPoints",
             "replacementTargets",
+            "zeroSum",
         ],
     )
     assert isinstance(data["teams"], list) and data["teams"]
+    zero_sum = data["zeroSum"]
+    _assert_json_keys(
+        zero_sum,
+        [
+            "teamCount",
+            "starters",
+            "bench",
+            "combined",
+            "positions",
+            "benchPositions",
+            "slots",
+            "analytics",
+        ],
+    )
 
 
 def test_evaluate_endpoint_with_details(client: TestClient) -> None:
@@ -75,6 +90,15 @@ def test_trade_evaluate_endpoint(client: TestClient) -> None:
     assert {payload["teamA"], payload["teamB"]} == teams
     if data.get("details"):
         assert len(data["details"]) == 2
+    _assert_json_keys(
+        data,
+        [
+            "zeroSumBefore",
+            "zeroSumAfter",
+            "zeroSumShift",
+        ],
+    )
+    assert "combined" in data["zeroSumShift"]
 
 
 def test_trade_find_endpoint(client: TestClient) -> None:
@@ -168,3 +192,44 @@ def test_sources_projections_endpoint(client: TestClient) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["limit"] == 5
+
+
+def test_evaluate_delta_endpoint(client: TestClient) -> None:
+    resp = client.post("/evaluate/delta", json={})
+    assert resp.status_code == 200
+    data = resp.json()
+    _assert_json_keys(data, ["evaluatedAt", "baseline", "scenario", "zeroSumShift"])
+    baseline = data["baseline"]
+    scenario = data["scenario"]
+    _assert_json_keys(baseline, ["teams", "zeroSum"])
+    _assert_json_keys(scenario, ["teams", "zeroSum"])
+
+
+def test_team_leverage_endpoint(client: TestClient) -> None:
+    team_name = client.get("/teams").json()[0]
+    resp = client.get(f"/teams/{team_name}/leverage")
+    assert resp.status_code == 200
+    data = resp.json()
+    _assert_json_keys(
+        data,
+        [
+            "team",
+            "combined",
+            "starters",
+            "bench",
+            "positions",
+            "benchPositions",
+            "slots",
+            "scarcityPressure",
+            "concentrationRisk",
+            "leveragePositions",
+            "needPositions",
+        ],
+    )
+
+
+def test_zero_sum_position_endpoint(client: TestClient) -> None:
+    resp = client.get("/zero-sum/positions", params={"pos": "RB"})
+    assert resp.status_code == 200
+    data = resp.json()
+    _assert_json_keys(data, ["position", "starters", "analytics"])
