@@ -31,6 +31,25 @@ echo "== /playoffs/odds (sample) =="
 PLAYOFFS_URL="${BASE_URL}/playoffs/odds?simulations=1000"
 curl_json "$PLAYOFFS_URL" | jq '{standings: .standings[:3], teams: (.teams[:5] | map({team, playoffProbability, rating, sosRemaining})), simulation}'
 
+echo "== /playoffs/trade (sample swap) =="
+cat <<'JSON' > /tmp/playoff-trade.json
+{
+  "teamA": "JohnBurrows_School",
+  "teamB": "KWood_Super_Marios",
+  "sendA": [
+    {"group": "WR", "name": "George Pickens"}
+  ],
+  "sendB": [
+    {"group": "WR", "name": "Drake London"}
+  ],
+  "simulations": 1000
+}
+JSON
+curl_json -X POST "${BASE_URL}/playoffs/trade" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/playoff-trade.json \
+  | jq '{baseline: {teams: (.baseline.teams[:3] | map({team, playoffProbability}))}, scenario: {teams: (.scenario.teams[:3] | map({team, playoffProbability}))}, delta: (.delta[:3])}'
+
 echo "== /evaluate (include details, benchLimit=3) =="
 EVAL_BODY='{"includeDetails": true, "benchLimit": 3}'
 curl_json -X POST "${BASE_URL}/evaluate" \

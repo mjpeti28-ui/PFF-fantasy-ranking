@@ -296,6 +296,60 @@ components:
         - standings
         - teams
         - simulation
+    PlayoffTeamDelta:
+      type: object
+      properties:
+        teamId: {type: string}
+        team: {type: string}
+        playoffProbabilityDelta: {type: number}
+        averageSeedDelta: {type: number, nullable: true}
+        medianSeedDelta: {type: number, nullable: true}
+        bestSeedDelta: {type: number, nullable: true}
+        worstSeedDelta: {type: number, nullable: true}
+        meanScoreDelta: {type: number, nullable: true}
+        stdDevDelta: {type: number, nullable: true}
+        ratingDelta: {type: number, nullable: true}
+        ratingZDelta: {type: number, nullable: true}
+        sosRemainingDelta: {type: number, nullable: true}
+        benchVolatilityDelta: {type: number, nullable: true}
+      required:
+        - teamId
+        - team
+        - playoffProbabilityDelta
+    PlayoffTradeRequest:
+      type: object
+      properties:
+        teamA: {type: string}
+        teamB: {type: string}
+        sendA:
+          type: array
+          items: {$ref: '#/components/schemas/TradePiece'}
+        sendB:
+          type: array
+          items: {$ref: '#/components/schemas/TradePiece'}
+        simulations:
+          type: integer
+          minimum: 500
+          maximum: 50000
+          default: 5000
+        playoffTeams:
+          type: integer
+          minimum: 2
+          default: 8
+        seed: {type: integer, nullable: true}
+        schedulePath: {type: string, nullable: true}
+      required:
+        - teamA
+        - teamB
+    PlayoffTradeResponse:
+      type: object
+      properties:
+        baseline: {$ref: '#/components/schemas/PlayoffOddsResponse'}
+        scenario: {$ref: '#/components/schemas/PlayoffOddsResponse'}
+        delta:
+          type: array
+          items: {$ref: '#/components/schemas/PlayoffTeamDelta'}
+      required: [baseline, scenario, delta]
     LeaderboardEntry:
       type: object
       properties:
@@ -984,6 +1038,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayoffOddsResponse'
+  /playoffs/trade:
+    post:
+      tags: [playoffs]
+      summary: Simulate playoff odds before and after a trade
+      operationId: simulatePlayoffTrade
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayoffTradeRequest'
+            example:
+              teamA: JohnBurrows_School
+              teamB: KWood_Super_Marios
+              sendA:
+                - {group: WR, name: George Pickens}
+              sendB:
+                - {group: WR, name: Drake London}
+              simulations: 2000
+              playoffTeams: 8
+      responses:
+        '200':
+          description: Baseline and post-trade playoff odds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayoffTradeResponse'
   /players:
     get:
       tags: [players]

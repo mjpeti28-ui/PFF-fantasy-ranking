@@ -383,6 +383,25 @@ class TradeFindResponse(BaseModel):
     proposals: List[TradeProposal]
 
 
+class PlayoffTradeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team_a: str = Field(..., alias="teamA")
+    team_b: str = Field(..., alias="teamB")
+    send_a: List[TradePiece] = Field(default_factory=list, alias="sendA")
+    send_b: List[TradePiece] = Field(default_factory=list, alias="sendB")
+    simulations: int = Field(default=5000, alias="simulations", ge=500, le=50000)
+    playoff_teams: int = Field(default=8, alias="playoffTeams", ge=2)
+    seed: Optional[int] = None
+    schedule_path: Optional[str] = Field(default=None, alias="schedulePath")
+
+
+class PlayoffTradeResponse(BaseModel):
+    baseline: PlayoffOddsResponse
+    scenario: PlayoffOddsResponse
+    delta: List[PlayoffTeamDelta] = Field(default_factory=list)
+
+
 class TeamLeverageResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -613,3 +632,21 @@ class PlayoffOddsResponse(BaseModel):
     standings: List[PlayoffStanding] = Field(default_factory=list)
     teams: List[PlayoffTeamProjection] = Field(default_factory=list)
     simulation: PlayoffSimulationMeta
+
+
+class PlayoffTeamDelta(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team_id: str = Field(..., alias="teamId")
+    team: str
+    playoff_probability_delta: float = Field(..., alias="playoffProbabilityDelta")
+    average_seed_delta: Optional[float] = Field(default=None, alias="averageSeedDelta")
+    median_seed_delta: Optional[float] = Field(default=None, alias="medianSeedDelta")
+    best_seed_delta: Optional[float] = Field(default=None, alias="bestSeedDelta")
+    worst_seed_delta: Optional[float] = Field(default=None, alias="worstSeedDelta")
+    mean_score_delta: Optional[float] = Field(default=None, alias="meanScoreDelta")
+    std_dev_delta: Optional[float] = Field(default=None, alias="stdDevDelta")
+    rating_delta: Optional[float] = Field(default=None, alias="ratingDelta")
+    rating_z_delta: Optional[float] = Field(default=None, alias="ratingZDelta")
+    sos_remaining_delta: Optional[float] = Field(default=None, alias="sosRemainingDelta")
+    bench_volatility_delta: Optional[float] = Field(default=None, alias="benchVolatilityDelta")
