@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from api.dependencies import get_context_manager, require_api_key
 from api.models import PlayoffOddsResponse, PlayoffSimulationMeta, PlayoffStanding, PlayoffTeamProjection
 from context import ContextManager
-from playoffs import DEFAULT_SCHEDULE_PATH, compute_playoff_predictions
+from playoffs import DEFAULT_PLAYOFF_TEAMS, DEFAULT_SCHEDULE_PATH, compute_playoff_predictions
 
 router = APIRouter(prefix="/playoffs", tags=["playoffs"], dependencies=[Depends(require_api_key)])
 
