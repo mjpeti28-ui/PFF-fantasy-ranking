@@ -27,6 +27,10 @@ echo "== /rankings (top 10 overall by rank) =="
 RANKINGS_URL="${BASE_URL}/rankings?metric=rank&limit=10"
 curl_json "$RANKINGS_URL" | jq '.'
 
+echo "== /playoffs/odds (sample) =="
+PLAYOFFS_URL="${BASE_URL}/playoffs/odds?simulations=1000"
+curl_json "$PLAYOFFS_URL" | jq '{standings: .standings[:3], teams: (.teams[:5] | map({team, playoffProbability, rating, sosRemaining})), simulation}'
+
 echo "== /evaluate (include details, benchLimit=3) =="
 EVAL_BODY='{"includeDetails": true, "benchLimit": 3}'
 curl_json -X POST "${BASE_URL}/evaluate" \

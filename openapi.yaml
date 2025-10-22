@@ -202,6 +202,100 @@ components:
           type: array
           items: {type: string}
           description: Names the service could not resolve; see the corresponding item.matches list for suggestions.
+    PlayoffStanding:
+      type: object
+      properties:
+        teamId: {type: string}
+        team: {type: string}
+        managers: {type: string, nullable: true}
+        wins: {type: integer}
+        losses: {type: integer}
+        ties: {type: integer}
+        gamesPlayed: {type: integer}
+        gamesRemaining: {type: integer}
+        pointsFor: {type: number}
+        pointsAgainst: {type: number}
+        winPct: {type: number}
+        rank: {type: integer}
+      required:
+        - teamId
+        - team
+        - wins
+        - losses
+        - ties
+        - gamesPlayed
+        - gamesRemaining
+        - pointsFor
+        - pointsAgainst
+        - winPct
+        - rank
+    PlayoffTeamProjection:
+      type: object
+      properties:
+        teamId: {type: string}
+        team: {type: string}
+        managers: {type: string, nullable: true}
+        wins: {type: integer}
+        losses: {type: integer}
+        ties: {type: integer}
+        gamesPlayed: {type: integer}
+        gamesRemaining: {type: integer}
+        pointsFor: {type: number}
+        pointsAgainst: {type: number}
+        winPct: {type: number}
+        meanScore: {type: number, nullable: true}
+        stdDev: {type: number, nullable: true}
+        rating: {type: number, nullable: true}
+        ratingZ: {type: number, nullable: true}
+        sosRemaining: {type: number, nullable: true}
+        benchVolatility: {type: number, nullable: true}
+        playoffProbability: {type: number}
+        averageSeed: {type: number, nullable: true}
+        medianSeed: {type: number, nullable: true}
+        bestSeed: {type: integer, nullable: true}
+        worstSeed: {type: integer, nullable: true}
+      required:
+        - teamId
+        - team
+        - wins
+        - losses
+        - ties
+        - gamesPlayed
+        - gamesRemaining
+        - pointsFor
+        - pointsAgainst
+        - winPct
+        - playoffProbability
+    PlayoffSimulationMeta:
+      type: object
+      properties:
+        runs: {type: integer}
+        playoffSpots: {type: integer}
+        seed: {type: integer, nullable: true}
+        pendingWeeks:
+          type: array
+          items: {type: integer}
+        schedulePath: {type: string}
+      required:
+        - runs
+        - playoffSpots
+        - pendingWeeks
+        - schedulePath
+    PlayoffOddsResponse:
+      type: object
+      properties:
+        standings:
+          type: array
+          items: {$ref: '#/components/schemas/PlayoffStanding'}
+        teams:
+          type: array
+          items: {$ref: '#/components/schemas/PlayoffTeamProjection'}
+        simulation:
+          $ref: '#/components/schemas/PlayoffSimulationMeta'
+      required:
+        - standings
+        - teams
+        - simulation
     LeaderboardEntry:
       type: object
       properties:
@@ -860,6 +954,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeagueMetadata'
+  /playoffs/odds:
+    get:
+      tags: [playoffs]
+      summary: Compute playoff odds for the active league
+      operationId: getPlayoffOdds
+      x-openai-isConsequential: false
+      parameters:
+        - name: simulations
+          in: query
+          description: Number of Monte Carlo simulation runs to execute.
+          schema: {type: integer, default: 5000, minimum: 500, maximum: 50000}
+        - name: playoffTeams
+          in: query
+          description: How many teams qualify for the playoffs.
+          schema: {type: integer, default: 8, minimum: 2}
+        - name: seed
+          in: query
+          description: Optional RNG seed for deterministic simulation output.
+          schema: {type: integer, nullable: true}
+        - name: schedulePath
+          in: query
+          description: Optional override for the schedule CSV path.
+          schema: {type: string, nullable: true}
+      responses:
+        '200':
+          description: Playoff probabilities and supporting metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayoffOddsResponse'
   /players:
     get:
       tags: [players]

@@ -553,3 +553,63 @@ class PlayerComparisonResponse(BaseModel):
 
     items: List[PlayerComparison]
     unresolved: List[str] = Field(default_factory=list)
+
+
+class PlayoffStanding(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team_id: str = Field(..., alias="teamId")
+    team: str
+    managers: Optional[str] = None
+    wins: int
+    losses: int
+    ties: int
+    games_played: int = Field(..., alias="gamesPlayed")
+    games_remaining: int = Field(..., alias="gamesRemaining")
+    points_for: float = Field(..., alias="pointsFor")
+    points_against: float = Field(..., alias="pointsAgainst")
+    win_pct: float = Field(..., alias="winPct")
+    rank: int
+
+
+class PlayoffTeamProjection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    team_id: str = Field(..., alias="teamId")
+    team: str
+    managers: Optional[str] = None
+    wins: int
+    losses: int
+    ties: int
+    games_played: int = Field(..., alias="gamesPlayed")
+    games_remaining: int = Field(..., alias="gamesRemaining")
+    points_for: float = Field(..., alias="pointsFor")
+    points_against: float = Field(..., alias="pointsAgainst")
+    win_pct: float = Field(..., alias="winPct")
+    mean_score: Optional[float] = Field(default=None, alias="meanScore")
+    std_dev: Optional[float] = Field(default=None, alias="stdDev")
+    rating: Optional[float] = None
+    rating_z: Optional[float] = Field(default=None, alias="ratingZ")
+    sos_remaining: Optional[float] = Field(default=None, alias="sosRemaining")
+    bench_volatility: Optional[float] = Field(default=None, alias="benchVolatility")
+    playoff_probability: float = Field(..., alias="playoffProbability")
+    average_seed: Optional[float] = Field(default=None, alias="averageSeed")
+    median_seed: Optional[float] = Field(default=None, alias="medianSeed")
+    best_seed: Optional[int] = Field(default=None, alias="bestSeed")
+    worst_seed: Optional[int] = Field(default=None, alias="worstSeed")
+
+
+class PlayoffSimulationMeta(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    runs: int
+    playoff_spots: int = Field(..., alias="playoffSpots")
+    seed: Optional[int] = None
+    pending_weeks: List[int] = Field(default_factory=list, alias="pendingWeeks")
+    schedule_path: str = Field(..., alias="schedulePath")
+
+
+class PlayoffOddsResponse(BaseModel):
+    standings: List[PlayoffStanding] = Field(default_factory=list)
+    teams: List[PlayoffTeamProjection] = Field(default_factory=list)
+    simulation: PlayoffSimulationMeta
