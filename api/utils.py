@@ -355,6 +355,59 @@ def build_waiver_candidates(
     return candidates
 
 
+def build_team_metadata_map(
+    rosters: Dict[str, Dict[str, list[str]]],
+    espn_league: Any = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Construct a metadata mapping for teams keyed by roster slug."""
+
+    metadata: Dict[str, Dict[str, Any]] = {}
+
+    if espn_league:
+        team_slugs = getattr(espn_league, "team_slugs", {}) or {}
+        teams_payload = getattr(espn_league, "teams", {}) or {}
+        for slug, team_id in team_slugs.items():
+            team_data = teams_payload.get(team_id)
+            if not team_data:
+                continue
+            owners_raw = list(team_data.managers or team_data.owners or [])
+            owners = [str(owner) for owner in owners_raw if owner]
+            owners_display = ", ".join(owners) if owners else None
+            metadata[slug] = {
+                "displayName": team_data.name.strip() if isinstance(team_data.name, str) else slug.replace("_", " "),
+                "abbrev": team_data.abbreviation,
+                "owners": owners,
+                "ownersDisplay": owners_display,
+                "primaryOwner": team_data.primary_owner,
+                "espnTeamId": team_data.team_id,
+            }
+
+    for slug in rosters.keys():
+        entry = metadata.get(slug)
+        if entry is None:
+            metadata[slug] = {
+                "displayName": slug.replace("_", " "),
+                "abbrev": None,
+                "owners": [],
+                "ownersDisplay": None,
+                "primaryOwner": None,
+                "espnTeamId": None,
+            }
+        else:
+            entry.setdefault("displayName", slug.replace("_", " "))
+            entry.setdefault("abbrev", entry.get("abbrev"))
+            owners = entry.get("owners")
+            if owners is None:
+                owners = []
+                entry["owners"] = owners
+            entry["owners"] = [str(owner) for owner in owners if owner]
+            entry["ownersDisplay"] = ", ".join(entry["owners"]) if entry["owners"] else None
+            entry.setdefault("primaryOwner", entry.get("primaryOwner"))
+            entry.setdefault("espnTeamId", entry.get("espnTeamId"))
+
+    return metadata
+
+
 # DataFrame query helpers -------------------------------------------------
 
 VALID_FILTER_OPS = {"eq", "ne", "gt", "gte", "lt", "lte", "contains"}

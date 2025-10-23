@@ -44,6 +44,12 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - `simulations/`: Persistent simulation runs with parameter sweeps, team summaries, and replacement levels.
 - `GPT_instructions.txt`: Operational guide for GPT-based agents—covers endpoint usage, throttling, async jobs, and reporting patterns.
 
+## ESPN Live Data Integration
+- Copy your ESPN league credentials into `.env.local` (keys `ESPN_S2`, `ESPN_SWID`, optional `ESPN_LEAGUE_ID`, `ESPN_SEASON`, `ESPN_SPORT_KEY`). The app auto-loads this file on import; no manual export needed.
+- When cookies are present, `load_rosters()` pulls the latest teams directly from ESPN and the context captures the entire payload (settings, schedule, standings metadata).
+- Playoff simulations, API responses, and the Streamlit dashboard will automatically pivot to the live ESPN schedule—no more updating `schedule.csv` by hand. The simulator still honours an explicit `schedule_path` override when you want to model hypotheticals.
+- League metadata endpoints and the Streamlit predictor expose ESPN scoring period info so you can confirm which scoring window the projections reflect.
+
 ## Core Evaluation Flow
 1. **Rankings ingest (`data.py`)**: Load primary and supplemental CSVs, normalize column names, compute position ranks, and merge projections (with configurable scaling via `PROJECTION_SCALE_BETA`).
 2. **Roster aliasing (`alias.py`)**: Fuzzy-match fantasy roster names to canonical CSV names (`FUZZY_CUTOFF`) while stripping IR markers and suffixes.

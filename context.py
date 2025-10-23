@@ -16,6 +16,7 @@ from alias import build_alias_map
 from config import PROJECTIONS_CSV, settings
 from data import build_lookups, load_rankings, load_projections, load_rosters
 from optimizer import flatten_league_names
+from espn_client import ESPNLeagueData, get_last_league_state
 
 STATS_DIR = Path("Stats")
 SOS_DIR = Path("StrengthOfSchedule")
@@ -52,6 +53,7 @@ class LeagueDataContext:
     projections_df: pd.DataFrame
     stats_data: Dict[str, pd.DataFrame]
     sos_data: Dict[str, pd.DataFrame]
+    espn_league: Optional[ESPNLeagueData] = None
 
 
 def build_context(
@@ -91,6 +93,7 @@ def build_context(
 
     stats_data = _load_stats_data()
     sos_data = _load_sos_data()
+    espn_league = get_last_league_state()
 
     snapshot = LeagueDataContext(
         dataframe=df,
@@ -109,6 +112,7 @@ def build_context(
         projections_df=projections_df,
         stats_data=stats_data,
         sos_data=sos_data,
+        espn_league=espn_league,
     )
     return snapshot
 
@@ -179,6 +183,16 @@ class ContextManager:
         """Return lightweight info about the active context."""
 
         ctx = self.get()
+        espn_meta = None
+        if ctx.espn_league:
+            league_state = ctx.espn_league
+            espn_meta = {
+                "league_id": league_state.league_id,
+                "season": league_state.season,
+                "scoring_period": league_state.scoring_period_id,
+                "teams": len(league_state.teams),
+            }
+
         return {
             "last_reload": ctx.created_at.isoformat(),
             "rankings_path": str(ctx.rankings_path),
@@ -186,8 +200,9 @@ class ContextManager:
             "supplemental_path": str(ctx.supplemental_path) if ctx.supplemental_path else None,
             "settings": ctx.settings_snapshot,
             "team_count": len(ctx.rosters),
-        "player_count": int(ctx.dataframe.shape[0]),
-    }
+            "player_count": int(ctx.dataframe.shape[0]),
+            "espn": espn_meta,
+        }
 
 
 # Helper loaders ---------------------------------------------------------

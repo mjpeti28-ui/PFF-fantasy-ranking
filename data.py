@@ -1,9 +1,14 @@
 import copy
+import logging
+import os
 import re
 from pathlib import Path
-import pandas as pd
 from typing import Dict, Optional
+
+import pandas as pd
+
 from config import CSV_RENAME, PROJECTIONS_CSV, settings
+from espn_client import fetch_rosters_from_espn
 from rosters import Fantasy_Rosters
 
 SUFFIXES = [' jr', ' sr', ' iii', ' ii', ' iv', ' v']
@@ -143,6 +148,33 @@ def build_lookups(df: pd.DataFrame):
     proj_by_name = df.set_index("Name")["ProjPoints"].to_dict()
     return rank_by_name, pos_by_name, posrank_by_name, proj_by_name
 
+_ROSTER_CACHE: Optional[Dict[str, Dict[str, list[str]]]] = None
+
+
 def load_rosters() -> Dict:
-    """Return a deep copy of the canonical roster data."""
-    return copy.deepcopy(Fantasy_Rosters)
+    """Return a deep copy of the canonical roster data.
+
+    If ESPN credentials are configured, fetch live rosters for the configured league;
+    otherwise fall back to the static `rosters.py` data.
+    """
+
+    global _ROSTER_CACHE
+    if _ROSTER_CACHE is not None:
+        return copy.deepcopy(_ROSTER_CACHE)
+
+    espn_configured = bool(
+        os.getenv("ESPN_S2") or os.getenv("espn_s2")
+    ) and bool(os.getenv("ESPN_SWID") or os.getenv("swid"))
+
+    if espn_configured:
+        try:
+            rosters, _ = fetch_rosters_from_espn()
+            _ROSTER_CACHE = rosters
+            logger = logging.getLogger(__name__)
+            logger.info("Loaded rosters from ESPN API for league %s", os.getenv("ESPN_LEAGUE_ID", "unknown"))
+            return copy.deepcopy(rosters)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logging.getLogger(__name__).warning("Falling back to static rosters; ESPN fetch failed: %s", exc)
+
+    _ROSTER_CACHE = copy.deepcopy(Fantasy_Rosters)
+    return copy.deepcopy(_ROSTER_CACHE)

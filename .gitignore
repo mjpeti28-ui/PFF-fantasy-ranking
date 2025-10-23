@@ -1,0 +1,9 @@
+*.pyc
+__pycache__/
+.pytest_cache/
+.DS_Store
+.env
+.env.*
+!.env.example
+.venv
+.venv_streamlit

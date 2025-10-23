@@ -202,6 +202,79 @@ components:
           type: array
           items: {type: string}
           description: Names the service could not resolve; see the corresponding item.matches list for suggestions.
+    PlayerNewsItem:
+      type: object
+      properties:
+        headline: {type: string, nullable: true}
+        story: {type: string, nullable: true}
+        source: {type: string, nullable: true}
+        link: {type: string, nullable: true}
+        published: {type: string, nullable: true, description: ISO timestamp when available.}
+    ESPNPlayerSnapshot:
+      type: object
+      properties:
+        playerId: {type: integer, nullable: true}
+        fullName: {type: string, nullable: true}
+        defaultPosition: {type: string, nullable: true}
+        lineupSlot: {type: string, nullable: true}
+        injuryStatus: {type: string, nullable: true}
+        isInjured: {type: boolean, nullable: true}
+        isOnIR: {type: boolean, nullable: true}
+        lastNewsDate: {type: integer, nullable: true, description: Milliseconds since epoch.}
+        seasonOutlook: {type: string, nullable: true}
+        weeklyOutlooks:
+          type: object
+          additionalProperties: {type: string}
+        raw: {type: object}
+    PlayerInfo:
+      type: object
+      properties:
+        query: {type: string}
+        canonical: {type: string, nullable: true}
+        position: {type: string, nullable: true}
+        team: {type: string, nullable: true}
+        rank: {type: integer, nullable: true}
+        posRank: {type: integer, nullable: true}
+        projPoints: {type: number, nullable: true}
+        projZ: {type: number, nullable: true}
+        ownership: {$ref: '#/components/schemas/PlayerOwnership'}
+        rankings: {type: object}
+        projections: {type: object}
+        stats:
+          type: object
+          additionalProperties: {type: object}
+        aliases:
+          type: array
+          items: {type: string}
+        espn:
+          $ref: '#/components/schemas/ESPNPlayerSnapshot'
+        news:
+          type: array
+          items: {$ref: '#/components/schemas/PlayerNewsItem'}
+        notes: {type: object}
+      required: [query, ownership, rankings, projections, stats, aliases, news, notes]
+    PlayerInfoRequest:
+      type: object
+      properties:
+        players:
+          type: array
+          items: {type: string}
+          description: Player names or aliases to hydrate.
+        includeStats: {type: boolean, default: true}
+        includeProjections: {type: boolean, default: true}
+        includeAliases: {type: boolean, default: false}
+        includeEspn: {type: boolean, default: true}
+        includeNews: {type: boolean, default: true}
+      required: [players]
+    PlayerInfoResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/PlayerInfo'}
+        unresolved:
+          type: array
+          items: {type: string}
     PlayoffStanding:
       type: object
       properties:
@@ -1105,6 +1178,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerListResponse'
+  /players/insights:
+    post:
+      tags: [players]
+      summary: Get comprehensive player insights
+      operationId: playerInsights
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlayerInfoRequest'}
+      responses:
+        '200':
+          description: Detailed player snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerInfoResponse'
   /players/{player_id}:
     get:
       tags: [players]

@@ -20,6 +20,7 @@ import pandas as pd
 
 from main import DEFAULT_PROJECTIONS, DEFAULT_RANKINGS, evaluate_league
 from rosters import Fantasy_Rosters
+from espn_client import ESPNLeagueData
 
 DEFAULT_SCHEDULE_PATH = Path("schedule.csv")
 DEFAULT_PLAYOFF_TEAMS = 8
@@ -123,6 +124,54 @@ def load_schedule(path: str | Path = DEFAULT_SCHEDULE_PATH) -> pd.DataFrame:
     return df
 
 
+def espn_schedule_to_dataframe(league: ESPNLeagueData) -> pd.DataFrame:
+    """Convert an ESPN league schedule into the canonical dataframe layout."""
+
+    rows: List[Dict[str, Any]] = []
+    for matchup in league.schedule:
+        if matchup.home_team_id is None or matchup.away_team_id is None:
+            continue
+        home_team = league.teams.get(matchup.home_team_id)
+        away_team = league.teams.get(matchup.away_team_id)
+        if home_team is None or away_team is None:
+            continue
+        rows.append(
+            {
+                "Week": matchup.matchup_period,
+                "AwayTeam": away_team.name,
+                "AwayManagers": ", ".join(away_team.managers) if away_team.managers else "",
+                "AwayScore": matchup.away_points,
+                "HomeTeam": home_team.name,
+                "HomeManagers": ", ".join(home_team.managers) if home_team.managers else "",
+                "HomeScore": matchup.home_points,
+                "MatchupId": matchup.matchup_id,
+                "Winner": matchup.winner,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "Week",
+                "AwayTeam",
+                "AwayManagers",
+                "AwayScore",
+                "HomeTeam",
+                "HomeManagers",
+                "HomeScore",
+                "MatchupId",
+                "Winner",
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    df["Week"] = pd.to_numeric(df["Week"], errors="coerce").astype("Int64")
+    df["AwayScore"] = pd.to_numeric(df["AwayScore"], errors="coerce")
+    df["HomeScore"] = pd.to_numeric(df["HomeScore"], errors="coerce")
+    df = df.sort_values(["Week", "AwayTeam", "HomeTeam"]).reset_index(drop=True)
+    return df
+
+
 def canonical_team_id(name: str) -> str:
     """Normalize team display names to a consistent identifier."""
 
@@ -134,12 +183,16 @@ def canonical_team_id(name: str) -> str:
     return cleaned
 
 
-def build_team_catalog(schedule: pd.DataFrame) -> Dict[str, TeamInfo]:
+def build_team_catalog(
+    schedule: pd.DataFrame,
+    roster_lookup: Optional[Dict[str, str]] = None,
+) -> Dict[str, TeamInfo]:
     """Derive canonical team metadata (name, managers, roster key)."""
 
-    roster_lookup = {
-        canonical_team_id(team.replace("_", " ")): team for team in Fantasy_Rosters.keys()
-    }
+    if roster_lookup is None:
+        roster_lookup = {
+            canonical_team_id(team.replace("_", " ")): team for team in Fantasy_Rosters.keys()
+        }
 
     catalog: Dict[str, TeamInfo] = {}
     for _, row in schedule.iterrows():
@@ -607,11 +660,34 @@ def compute_playoff_predictions(
     playoff_teams: int = DEFAULT_PLAYOFF_TEAMS,
     seed: Optional[int] = None,
     league_snapshot: Optional[Dict[str, Any]] = None,
+    espn_league: Optional[ESPNLeagueData] = None,
 ) -> Dict[str, Any]:
     """High-level helper returning standings and playoff probabilities."""
 
-    schedule = load_schedule(schedule_path)
-    team_catalog = build_team_catalog(schedule)
+    roster_lookup_override: Optional[Dict[str, str]] = None
+
+    schedule_path_obj: Optional[Path]
+    if schedule_path:
+        schedule_path_obj = Path(schedule_path)
+    else:
+        schedule_path_obj = None
+
+    use_espn_schedule = espn_league is not None and (
+        schedule_path_obj is None or schedule_path_obj == DEFAULT_SCHEDULE_PATH
+    )
+
+    if use_espn_schedule and espn_league is not None:
+        schedule = espn_schedule_to_dataframe(espn_league)
+        roster_lookup_override = {
+            canonical_team_id(team.name): team.slug for team in espn_league.teams.values()
+        }
+        schedule_source_path = "ESPN"
+    else:
+        resolved_path = schedule_path_obj if schedule_path_obj else DEFAULT_SCHEDULE_PATH
+        schedule = load_schedule(resolved_path)
+        schedule_source_path = str(resolved_path)
+
+    team_catalog = build_team_catalog(schedule, roster_lookup_override)
     base_records = compute_records(schedule, team_catalog)
     games_remaining = compute_games_remaining(schedule, team_catalog)
     standings_df = build_standings_dataframe(base_records, team_catalog, games_remaining)
@@ -701,7 +777,7 @@ def compute_playoff_predictions(
             "playoff_spots": playoff_teams,
             "seed": seed,
             "pending_weeks": future_weeks,
-            "schedule_path": str(schedule_path),
+            "schedule_path": schedule_source_path,
         },
     }
 

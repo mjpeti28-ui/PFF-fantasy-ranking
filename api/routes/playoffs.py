@@ -17,6 +17,7 @@ from api.models import (
     PlayoffTradeResponse,
     TradePiece,
 )
+from api.utils import build_team_metadata_map
 from alias import build_alias_map
 from config import SCORABLE_POS
 from context import ContextManager
@@ -235,6 +236,7 @@ async def get_playoff_odds(
             num_simulations=simulations,
             playoff_teams=playoff_teams,
             seed=seed,
+            espn_league=ctx.espn_league,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -306,6 +308,7 @@ async def playoff_trade_simulation(
         if not name.startswith("Replacement ")
     ]
     finder.alias_map = build_alias_map(alias_names, finder.df)
+    finder.team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
     mutated_rosters = finder._apply_trade(  # noqa: SLF001
         finder.rosters,
         payload.team_a,
@@ -328,6 +331,7 @@ async def playoff_trade_simulation(
         playoff_teams=payload.playoff_teams,
         seed=payload.seed,
         league_snapshot=baseline_snapshot,
+        espn_league=ctx.espn_league,
     )
 
     scenario_predictions = compute_playoff_predictions(
@@ -338,6 +342,7 @@ async def playoff_trade_simulation(
         playoff_teams=payload.playoff_teams,
         seed=payload.seed,
         league_snapshot=scenario_snapshot,
+        espn_league=ctx.espn_league,
     )
 
     baseline_response = _build_playoff_response(

@@ -12,7 +12,7 @@ from api.models import (
     WaiverRecommendResponse,
     WaiverTeamResult,
 )
-from api.utils import build_leaderboards_map, build_team_details, build_waiver_candidates, coerce_float
+from api.utils import build_leaderboards_map, build_team_details, build_team_metadata_map, build_waiver_candidates, coerce_float
 from config import settings
 from context import ContextManager
 from data import normalize_name
@@ -30,6 +30,7 @@ async def waiver_candidates(
     offset: int = Query(0, ge=0),
 ) -> WaiverListResponse:
     ctx = manager.get()
+    team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
 
     league = evaluate_league(
         str(ctx.rankings_path),
@@ -147,6 +148,7 @@ async def waiver_candidates(
         offset=offset,
         positionFilter=position.upper() if position else None,
         teamFilter=team,
+        teamMetadata=team_metadata,
     )
 
 
@@ -252,4 +254,5 @@ async def waiver_recommend(
         combined_scores={team: coerce_float(val) for team, val in new_combined.items()},
         leaderboards=leaderboards_payload,
         details=details_payload,
+        teamMetadata=team_metadata,
     )

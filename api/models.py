@@ -29,6 +29,7 @@ class LeagueMetadataResponse(BaseModel):
     projections_path: Optional[str] = None
     supplemental_path: Optional[str] = None
     settings: Dict[str, Any]
+    espn: Optional[Dict[str, Any]] = None
 
 
 class LeagueReloadRequest(BaseModel):
@@ -314,6 +315,7 @@ class TradeEvaluateResponse(BaseModel):
     zero_sum_shift: ZeroSumShift = Field(..., alias="zeroSumShift")
     leaderboards: Dict[str, List[LeaderboardEntry]]
     details: Optional[List[TeamDetail]] = None
+    team_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict, alias="teamMetadata")
 
 
 class TradeFindRequest(BaseModel):
@@ -373,6 +375,7 @@ class TradeProposal(BaseModel):
     narrative: Dict[str, str] = Field(default_factory=dict)
     details: Optional[List[TeamDetail]] = None
     leaderboards: Optional[Dict[str, List[LeaderboardEntry]]] = None
+    team_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict, alias="teamMetadata")
 
 
 class TradeFindResponse(BaseModel):
@@ -381,6 +384,7 @@ class TradeFindResponse(BaseModel):
     evaluated_at: datetime = Field(..., alias="evaluatedAt")
     baseline_combined: Dict[str, float] = Field(..., alias="baselineCombined")
     proposals: List[TradeProposal]
+    team_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict, alias="teamMetadata")
 
 
 class PlayoffTradeRequest(BaseModel):
@@ -451,6 +455,7 @@ class WaiverListResponse(BaseModel):
     offset: int
     position_filter: Optional[str] = Field(default=None, alias="positionFilter")
     team_filter: Optional[str] = Field(default=None, alias="teamFilter")
+    team_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict, alias="teamMetadata")
 
 
 class WaiverChange(BaseModel):
@@ -486,6 +491,7 @@ class WaiverRecommendResponse(BaseModel):
     combined_scores: Dict[str, float] = Field(..., alias="combinedScores")
     leaderboards: Dict[str, List[LeaderboardEntry]]
     details: Optional[List[TeamDetail]] = None
+    team_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict, alias="teamMetadata")
 
 
 class DataTableResponse(BaseModel):
@@ -571,6 +577,67 @@ class PlayerComparisonResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     items: List[PlayerComparison]
+    unresolved: List[str] = Field(default_factory=list)
+
+
+class PlayerInfoRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    players: List[str]
+    include_stats: bool = Field(default=True, alias="includeStats")
+    include_projections: bool = Field(default=True, alias="includeProjections")
+    include_aliases: bool = Field(default=False, alias="includeAliases")
+    include_espn: bool = Field(default=True, alias="includeEspn")
+    include_news: bool = Field(default=True, alias="includeNews")
+
+
+class PlayerNewsItem(BaseModel):
+    headline: Optional[str] = None
+    story: Optional[str] = None
+    source: Optional[str] = None
+    link: Optional[str] = None
+    published: Optional[str] = None
+
+
+class ESPNPlayerSnapshot(BaseModel):
+    player_id: Optional[int] = Field(default=None, alias="playerId")
+    full_name: Optional[str] = Field(default=None, alias="fullName")
+    default_position: Optional[str] = Field(default=None, alias="defaultPosition")
+    lineup_slot: Optional[str] = Field(default=None, alias="lineupSlot")
+    injury_status: Optional[str] = Field(default=None, alias="injuryStatus")
+    is_injured: Optional[bool] = Field(default=None, alias="isInjured")
+    is_on_ir: Optional[bool] = Field(default=None, alias="isOnIR")
+    last_news_date: Optional[int] = Field(default=None, alias="lastNewsDate")
+    season_outlook: Optional[str] = Field(default=None, alias="seasonOutlook")
+    weekly_outlooks: Dict[str, Any] = Field(default_factory=dict, alias="weeklyOutlooks")
+    raw: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlayerInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    query: str
+    canonical: Optional[str] = None
+    position: Optional[str] = None
+    team: Optional[str] = None
+    rank: Optional[int] = None
+    pos_rank: Optional[int] = Field(default=None, alias="posRank")
+    proj_points: Optional[float] = Field(default=None, alias="projPoints")
+    proj_z: Optional[float] = Field(default=None, alias="projZ")
+    ownership: PlayerOwnership = Field(default_factory=lambda: PlayerOwnership(is_free_agent=True))
+    rankings: Dict[str, Any] = Field(default_factory=dict)
+    projections: Dict[str, Any] = Field(default_factory=dict)
+    stats: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    aliases: List[str] = Field(default_factory=list)
+    espn: Optional[ESPNPlayerSnapshot] = None
+    news: List[PlayerNewsItem] = Field(default_factory=list)
+    notes: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PlayerInfoResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: List[PlayerInfo]
     unresolved: List[str] = Field(default_factory=list)
 
 

@@ -5,7 +5,7 @@ from heapq import heappush, heappushpop
 import multiprocessing as mp
 import multiprocessing.pool as mppool
 import os
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict, Any
 
 import atexit
 
@@ -164,6 +164,7 @@ class TradeFinder:
             for team, roster in self.rosters.items()
         }
         self.placeholder_ids = count(1)
+        self.team_metadata: Dict[str, Dict[str, Any]] = {}
         self.baseline = None
         self.baseline_team_results = {}
         self.baseline_starter_vor = {}
@@ -260,6 +261,13 @@ class TradeFinder:
         drop_tax: float,
         star_gain: float,
     ) -> str:
+        meta = self.team_metadata.get(team, {})
+        display_name = meta.get("displayName") or team.replace("_", " ")
+        owners_display = meta.get("ownersDisplay")
+        if owners_display:
+            header = f"{display_name} (Owners: {owners_display})"
+        else:
+            header = display_name
         positions = sorted({grp for grp, _ in received}) or ["depth"]
         pos_text = ", ".join(positions)
         direction = "boosts" if delta_combined >= 0 else "trims"
@@ -270,7 +278,7 @@ class TradeFinder:
             pieces.append(f"adds {star_gain:.1f} VOR of incoming talent")
         if drop_tax:
             pieces.append(f"may drop {drop_tax:.1f} bench VOR")
-        return "; ".join(pieces)
+        return f"{header}: {'; '.join(pieces)}"
 
     def _trade_metrics(
         self,
@@ -361,6 +369,10 @@ class TradeFinder:
             "narrative": narrative,
             "drop_tax": {team_a: drop_tax_a, team_b: drop_tax_b},
             "star_gain": {team_a: star_gain_a, team_b: star_gain_b},
+            "team_metadata": {
+                team_a: self.team_metadata.get(team_a, {}),
+                team_b: self.team_metadata.get(team_b, {}),
+            },
         }
 
     def _build_player_impacts(self) -> None:

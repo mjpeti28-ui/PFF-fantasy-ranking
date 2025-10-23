@@ -1,7 +1,7 @@
 import copy
 import importlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import altair as alt
 import numpy as np
@@ -9,7 +9,9 @@ import pandas as pd
 import streamlit as st
 
 from alias import build_alias_map
+from api.utils import build_team_metadata_map
 from data import load_rosters, normalize_name
+from espn_client import get_last_league_state
 import main as main_module
 from config import SCORABLE_POS, settings
 from trading import (
@@ -21,6 +23,7 @@ from trading import (
     PROJECTIONS_PATH,
 )
 from history_tracker import archive_if_changed
+from optimizer import flatten_league_names
 from simulation import SimulationStore, generate_random_configs
 from epw import evaluate_trade_epw, compute_league_epw
 from playoffs import (
@@ -332,6 +335,225 @@ def summary_table(
     if not df.empty:
         df = df.sort_values("Combined Score", ascending=False)
     return df
+
+
+def _prepare_playoff_dataframe(
+    predictions: Dict[str, Any],
+    playoff_spots: int,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series]:
+    teams_df = pd.DataFrame(predictions.get("teams", []))
+    if teams_df.empty:
+        empty_series = pd.Series(dtype=float)
+        return teams_df, pd.DataFrame(), empty_series, empty_series, empty_series, empty_series
+
+    teams_df = teams_df.fillna(
+        {
+            "wins": 0,
+            "losses": 0,
+            "ties": 0,
+            "games_played": 0,
+            "games_remaining": 0,
+            "points_for": 0.0,
+            "points_against": 0.0,
+            "win_pct": 0.0,
+            "playoff_probability": 0.0,
+            "average_seed": np.nan,
+            "median_seed": np.nan,
+            "rating": np.nan,
+            "rating_z": np.nan,
+            "sos_remaining": 0.0,
+            "bench_adjust": 1.0,
+        }
+    )
+
+    for column in ["wins", "losses", "ties", "games_played", "games_remaining"]:
+        teams_df[column] = pd.to_numeric(teams_df[column], errors="coerce").fillna(0).astype(int)
+    for column in ["points_for", "points_against", "win_pct"]:
+        teams_df[column] = pd.to_numeric(teams_df[column], errors="coerce").fillna(0.0)
+
+    playoff_pct = (pd.to_numeric(teams_df["playoff_probability"], errors="coerce").fillna(0.0) * 100.0).round(1)
+    avg_seed = pd.to_numeric(teams_df["average_seed"], errors="coerce").round(2)
+    median_seed = pd.to_numeric(teams_df["median_seed"], errors="coerce")
+    rating = pd.to_numeric(teams_df.get("rating"), errors="coerce")
+    rating_z = pd.to_numeric(teams_df.get("rating_z"), errors="coerce").fillna(0.0)
+    sos_z = pd.to_numeric(teams_df.get("sos_remaining"), errors="coerce").fillna(0.0)
+    bench_adjust = pd.to_numeric(teams_df.get("bench_adjust"), errors="coerce").fillna(1.0)
+
+    display_df = pd.DataFrame(
+        {
+            "Team": teams_df["team"],
+            "Managers": teams_df["managers"],
+            "W": teams_df["wins"],
+            "L": teams_df["losses"],
+            "T": teams_df["ties"],
+            "Win %": teams_df["win_pct"].round(3),
+            "PF": teams_df["points_for"].round(1),
+            "PA": teams_df["points_against"].round(1),
+            "Playoff %": playoff_pct,
+            "Avg Seed": avg_seed,
+            "Median Seed": median_seed,
+            "Best Seed": teams_df["best_seed"],
+            "Worst Seed": teams_df["worst_seed"],
+            "Games Left": teams_df["games_remaining"],
+            "Rating": rating.round(2),
+            "Rating Z": rating_z.round(2),
+            "Remaining SOS (z)": sos_z.round(2),
+            "Bench Volatility": bench_adjust.round(2),
+        }
+    )
+
+    display_df = display_df.sort_values("Playoff %", ascending=False).reset_index(drop=True)
+    display_df["Playoff Range"] = display_df.index.map(lambda idx: "Inside" if idx < playoff_spots else "Bubble")
+
+    return teams_df, display_df, playoff_pct, sos_z, rating_z, bench_adjust
+
+
+def _build_trade_options(
+    rosters: Dict[str, Dict[str, List[str]]],
+    team: str,
+) -> Dict[str, Tuple[str, str]]:
+    options: Dict[str, Tuple[str, str]] = {}
+    roster = rosters.get(team, {})
+    for group, names in roster.items():
+        for name in names:
+            label = f"{group} — {name}"
+            options[label] = (group, name)
+    return dict(sorted(options.items()))
+
+
+def _validate_trade_players(
+    rosters: Dict[str, Dict[str, List[str]]],
+    team: str,
+    pieces: List[Tuple[str, str]],
+) -> None:
+    roster = rosters.get(team)
+    if roster is None:
+        raise ValueError(f"Unknown team '{team}'.")
+    missing: List[str] = []
+    for group, name in pieces:
+        if name not in roster.get(group, []):
+            missing.append(f"{name} ({group})")
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"Team '{team}' does not roster: {joined}")
+
+
+def _mutate_rosters_for_trade(
+    rosters: Dict[str, Dict[str, List[str]]],
+    team_a: str,
+    team_b: str,
+    send_a: List[Tuple[str, str]],
+    send_b: List[Tuple[str, str]],
+) -> Dict[str, Dict[str, List[str]]]:
+    finder = TradeFinder(str(RANKINGS_PATH), str(PROJECTIONS_PATH), build_baseline=False)
+    finder.rosters = copy.deepcopy(rosters)
+    finder.team_targets = {
+        team: finder._team_player_count(roster)  # noqa: SLF001
+        for team, roster in finder.rosters.items()
+    }
+    finder.team_groups = {
+        team: {grp for grp in roster if grp in SCORABLE_POS}
+        for team, roster in finder.rosters.items()
+    }
+    alias_names = [
+        name
+        for name in flatten_league_names(finder.rosters)
+        if not name.startswith("Replacement ")
+    ]
+    finder.alias_map = build_alias_map(alias_names, finder.df)
+    league_state = get_last_league_state()
+    finder.team_metadata = build_team_metadata_map(finder.rosters, league_state) if league_state else {}
+    return finder._apply_trade(  # noqa: SLF001
+        finder.rosters,
+        team_a,
+        team_b,
+        send_a,
+        send_b,
+    )
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _diff_entry(base: Dict[str, Any], scenario: Dict[str, Any], key: str) -> Optional[float]:
+    base_val = _safe_float(base.get(key))
+    scenario_val = _safe_float(scenario.get(key))
+    if base_val is None or scenario_val is None:
+        return None
+    return scenario_val - base_val
+
+
+def _compute_playoff_delta_df(
+    baseline_predictions: Dict[str, Any],
+    scenario_predictions: Dict[str, Any],
+) -> pd.DataFrame:
+    baseline_map = {
+        entry.get("team_id"): entry
+        for entry in baseline_predictions.get("teams", [])
+        if entry.get("team_id")
+    }
+    scenario_map = {
+        entry.get("team_id"): entry
+        for entry in scenario_predictions.get("teams", [])
+        if entry.get("team_id")
+    }
+
+    rows: List[Dict[str, Any]] = []
+    for team_id, base_entry in baseline_map.items():
+        scenario_entry = scenario_map.get(team_id)
+        if scenario_entry is None:
+            continue
+        team_name = scenario_entry.get("team") or base_entry.get("team") or team_id
+        base_prob = _safe_float(base_entry.get("playoff_probability")) or 0.0
+        scenario_prob = _safe_float(scenario_entry.get("playoff_probability")) or 0.0
+
+        rows.append(
+            {
+                "Team": team_name,
+                "Δ Playoff %": (scenario_prob - base_prob) * 100.0,
+                "Δ Avg Seed": _diff_entry(base_entry, scenario_entry, "average_seed"),
+                "Δ Median Seed": _diff_entry(base_entry, scenario_entry, "median_seed"),
+                "Δ Best Seed": _diff_entry(base_entry, scenario_entry, "best_seed"),
+                "Δ Worst Seed": _diff_entry(base_entry, scenario_entry, "worst_seed"),
+                "Δ Rating": _diff_entry(base_entry, scenario_entry, "rating"),
+                "Δ Rating Z": _diff_entry(base_entry, scenario_entry, "rating_z"),
+                "Δ SOS (z)": _diff_entry(base_entry, scenario_entry, "sos_remaining"),
+                "Δ Mean Score": _diff_entry(base_entry, scenario_entry, "mean_score"),
+                "Δ Std Dev": _diff_entry(base_entry, scenario_entry, "std_dev"),
+                "Δ Bench Volatility": _diff_entry(base_entry, scenario_entry, "bench_adjust"),
+            }
+        )
+
+    delta_df = pd.DataFrame(rows)
+    if delta_df.empty:
+        return delta_df
+
+    rounding_map = {
+        "Δ Playoff %": 2,
+        "Δ Avg Seed": 2,
+        "Δ Median Seed": 2,
+        "Δ Best Seed": 2,
+        "Δ Worst Seed": 2,
+        "Δ Rating": 3,
+        "Δ Rating Z": 3,
+        "Δ SOS (z)": 3,
+        "Δ Mean Score": 2,
+        "Δ Std Dev": 2,
+        "Δ Bench Volatility": 3,
+    }
+    for column, precision in rounding_map.items():
+        if column in delta_df.columns:
+            delta_df[column] = pd.to_numeric(delta_df[column], errors="coerce").round(precision)
+
+    delta_df = delta_df.fillna("--")
+    delta_df = delta_df.sort_values("Δ Playoff %", ascending=False).reset_index(drop=True)
+    return delta_df
 
 
 def build_available_players(df: pd.DataFrame, rosters: Dict[str, Dict[str, List[str]]]) -> pd.DataFrame:
@@ -1319,6 +1541,9 @@ def render_playoff_predictor(teams: List[str]) -> None:
         key="playoff_spots",
     )
 
+    rosters = load_rosters()
+    espn_league = get_last_league_state()
+
     simulations = st.sidebar.slider(
         "Simulation runs",
         min_value=500,
@@ -1354,6 +1579,7 @@ def render_playoff_predictor(teams: List[str]) -> None:
         "playoff_spots": int(playoff_spots),
         "simulations": int(simulations),
         "seed": seed,
+        "espn_scoring_period": espn_league.scoring_period_id if espn_league else None,
     }
 
     should_run = refresh or stored_settings != current_settings or "playoff_result" not in st.session_state
@@ -1373,6 +1599,7 @@ def render_playoff_predictor(teams: List[str]) -> None:
                     playoff_teams=int(playoff_spots),
                     seed=seed,
                     league_snapshot=league_snapshot,
+                    espn_league=espn_league,
                 )
             except FileNotFoundError as exc:
                 st.error(f"Could not load schedule: {exc}")
@@ -1388,73 +1615,13 @@ def render_playoff_predictor(teams: List[str]) -> None:
         st.info("Run the playoff simulation to view odds and projections.")
         return
 
-    teams_df = pd.DataFrame(predictions.get("teams", []))
-    if teams_df.empty:
+    teams_df, display_df, playoff_pct, sos_z, rating_z, bench_adjust = _prepare_playoff_dataframe(
+        predictions,
+        playoff_spots,
+    )
+    if teams_df.empty or display_df.empty:
         st.warning("No team projections were returned from the playoff simulator.")
         return
-
-    teams_df = teams_df.fillna(
-        {
-            "playoff_probability": 0.0,
-            "average_seed": np.nan,
-            "median_seed": np.nan,
-            "rating": np.nan,
-            "rating_z": np.nan,
-            "sos_remaining": 0.0,
-            "bench_adjust": 1.0,
-        }
-    )
-
-    playoff_pct = pd.to_numeric(teams_df["playoff_probability"], errors="coerce").fillna(0.0) * 100.0
-    playoff_pct = playoff_pct.round(1)
-    avg_seed = pd.to_numeric(teams_df["average_seed"], errors="coerce").round(2)
-    median_seed = pd.to_numeric(teams_df["median_seed"], errors="coerce")
-    rating = (
-        pd.to_numeric(teams_df["rating"], errors="coerce")
-        if "rating" in teams_df
-        else pd.Series(np.nan, index=teams_df.index)
-    )
-    rating_z = (
-        pd.to_numeric(teams_df["rating_z"], errors="coerce")
-        if "rating_z" in teams_df
-        else pd.Series(0.0, index=teams_df.index)
-    )
-    sos_z = (
-        pd.to_numeric(teams_df["sos_remaining"], errors="coerce").fillna(0.0)
-        if "sos_remaining" in teams_df
-        else pd.Series(0.0, index=teams_df.index)
-    )
-    bench_adjust = (
-        pd.to_numeric(teams_df["bench_adjust"], errors="coerce").fillna(1.0)
-        if "bench_adjust" in teams_df
-        else pd.Series(1.0, index=teams_df.index)
-    )
-
-    display_df = pd.DataFrame(
-        {
-            "Team": teams_df["team"],
-            "Managers": teams_df["managers"],
-            "W": teams_df["wins"].astype(int),
-            "L": teams_df["losses"].astype(int),
-            "T": teams_df["ties"].astype(int),
-            "Win %": teams_df["win_pct"].round(3),
-            "PF": teams_df["points_for"].round(1),
-            "PA": teams_df["points_against"].round(1),
-            "Playoff %": playoff_pct,
-            "Avg Seed": avg_seed,
-            "Median Seed": median_seed,
-            "Best Seed": teams_df["best_seed"],
-            "Worst Seed": teams_df["worst_seed"],
-            "Games Left": teams_df["games_remaining"],
-            "Rating": rating.round(2),
-            "Rating Z": rating_z.round(2),
-            "Remaining SOS (z)": sos_z.round(2),
-            "Bench Volatility": bench_adjust.round(2),
-        }
-    )
-
-    display_df = display_df.sort_values("Playoff %", ascending=False).reset_index(drop=True)
-    display_df["Playoff Range"] = display_df.index.map(lambda idx: "Inside" if idx < playoff_spots else "Bubble")
 
     st.subheader("Playoff odds snapshot")
     st.dataframe(display_df, use_container_width=True)
@@ -1519,6 +1686,149 @@ def render_playoff_predictor(teams: List[str]) -> None:
         )
         st.subheader("Playoff outlook vs. remaining schedule")
         st.altair_chart(sos_chart, use_container_width=True)
+
+    with st.expander("Trade impact simulation"):
+        if len(teams) < 2:
+            st.info("Need at least two teams to simulate a trade.")
+        else:
+            trade_col1, trade_col2 = st.columns(2)
+            team_a = trade_col1.selectbox(
+                "Team A",
+                teams,
+                key="playoff_trade_team_a",
+            )
+            opponents = [team for team in teams if team != team_a]
+            if not opponents:
+                st.warning("Select a different league configuration with more teams.")
+            else:
+                team_b = trade_col2.selectbox(
+                    "Team B",
+                    opponents,
+                    key="playoff_trade_team_b",
+                )
+                options_a = _build_trade_options(rosters, team_a)
+                options_b = _build_trade_options(rosters, team_b)
+
+                send_a_labels = st.multiselect(
+                    "Team A sends",
+                    list(options_a.keys()),
+                    key="playoff_trade_send_a",
+                )
+                send_b_labels = st.multiselect(
+                    "Team B sends",
+                    list(options_b.keys()),
+                    key="playoff_trade_send_b",
+                )
+
+                simulate_trade = st.button("Simulate trade playoff odds", key="playoff_trade_simulate")
+                if simulate_trade:
+                    if team_a == team_b:
+                        st.error("Select two different teams.")
+                    else:
+                        send_a = [options_a[label] for label in send_a_labels]
+                        send_b = [options_b[label] for label in send_b_labels]
+                        try:
+                            _validate_trade_players(rosters, team_a, send_a)
+                            _validate_trade_players(rosters, team_b, send_b)
+                            mutated_rosters = _mutate_rosters_for_trade(rosters, team_a, team_b, send_a, send_b)
+                        except ValueError as exc:
+                            st.error(str(exc))
+                        else:
+                            with st.spinner("Simulating trade impact..."):
+                                scenario_snapshot = evaluate_league_safe(
+                                    str(RANKINGS_PATH),
+                                    projections_path=str(PROJECTIONS_PATH),
+                                    custom_rosters=mutated_rosters,
+                                )
+                                scenario_predictions = compute_playoff_predictions(
+                                    schedule_path=schedule_path,
+                                    rankings_path=str(RANKINGS_PATH),
+                                    projections_path=str(PROJECTIONS_PATH),
+                                    num_simulations=int(simulations),
+                                    playoff_teams=int(playoff_spots),
+                                    seed=seed,
+                                    league_snapshot=scenario_snapshot,
+                                    espn_league=espn_league,
+                                )
+
+                            (
+                                scenario_teams_df,
+                                scenario_display_df,
+                                scenario_playoff_pct,
+                                scenario_sos_z,
+                                scenario_rating_z,
+                                scenario_bench,
+                            ) = _prepare_playoff_dataframe(scenario_predictions, playoff_spots)
+
+                            if scenario_display_df.empty:
+                                st.warning("Unable to compute playoff odds for the adjusted rosters.")
+                            else:
+                                st.markdown("**Scenario playoff odds**")
+                                st.dataframe(scenario_display_df, use_container_width=True)
+
+                                delta_df = _compute_playoff_delta_df(predictions, scenario_predictions)
+                                if delta_df.empty:
+                                    st.info("No differences detected between baseline and post-trade projections.")
+                                else:
+                                    st.markdown("**Delta vs. baseline**")
+                                    st.dataframe(delta_df, use_container_width=True)
+
+                                scenario_chart_df = scenario_display_df[["Team", "Playoff %", "Playoff Range"]]
+                                sorted_scenario = scenario_chart_df.sort_values("Playoff %")["Team"].tolist()
+                                scenario_chart = (
+                                    alt.Chart(scenario_chart_df)
+                                    .mark_bar()
+                                    .encode(
+                                        x=alt.X("Playoff %:Q", scale=alt.Scale(domain=(0, 100)), title="Playoff probability (%)"),
+                                        y=alt.Y("Team:N", sort=sorted_scenario),
+                                        color=alt.Color("Playoff Range:N", scale=alt.Scale(domain=["Inside", "Bubble"], range=["#1f77b4", "#ff7f0e"])),
+                                        tooltip=[
+                                            alt.Tooltip("Team:N"),
+                                            alt.Tooltip("Playoff %:Q", format=".1f"),
+                                            alt.Tooltip("Playoff Range:N"),
+                                        ],
+                                    )
+                                )
+                                st.altair_chart(scenario_chart, use_container_width=True)
+
+                                scenario_sos_chart_df = pd.DataFrame(
+                                    {
+                                        "Team": scenario_teams_df["team"],
+                                        "Playoff %": scenario_playoff_pct,
+                                        "Remaining SOS (z)": scenario_sos_z,
+                                        "Rating Z": scenario_rating_z,
+                                    }
+                                )
+                                if not scenario_sos_chart_df.empty:
+                                    scenario_scatter = (
+                                        alt.Chart(scenario_sos_chart_df)
+                                        .mark_circle(size=120, opacity=0.85)
+                                        .encode(
+                                            x=alt.X(
+                                                "Remaining SOS (z):Q",
+                                                title="Remaining schedule difficulty (z-score)",
+                                                scale=alt.Scale(zero=False),
+                                            ),
+                                            y=alt.Y("Playoff %:Q", title="Playoff probability (%)", scale=alt.Scale(domain=(0, 100))),
+                                            color=alt.Color(
+                                                "Rating Z:Q",
+                                                title="Power rating (z)",
+                                                scale=alt.Scale(scheme="blues"),
+                                            ),
+                                            tooltip=[
+                                                alt.Tooltip("Team:N"),
+                                                alt.Tooltip("Playoff %:Q", format=".1f"),
+                                                alt.Tooltip("Remaining SOS (z):Q", format=".2f"),
+                                                alt.Tooltip("Rating Z:Q", format=".2f"),
+                                            ],
+                                        )
+                                    )
+                                    st.altair_chart(scenario_scatter, use_container_width=True)
+
+                                focus_delta = delta_df[delta_df["Team"].isin([team_a, team_b])]
+                                if not focus_delta.empty:
+                                    st.markdown("**Trade teams delta**")
+                                    st.dataframe(focus_delta.reset_index(drop=True), use_container_width=True)
 
     standings = pd.DataFrame(predictions.get("standings", []))
     if not standings.empty:

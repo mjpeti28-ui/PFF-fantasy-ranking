@@ -22,6 +22,7 @@ from api.models import (
 from api.utils import (
     build_leaderboards_map,
     build_team_details,
+    build_team_metadata_map,
     build_zero_sum_payload,
     build_zero_sum_shift,
     coerce_float,
@@ -62,6 +63,8 @@ def _build_trade_find_response(
 ) -> TradeFindResponse:
     ctx = manager.get()
     finder = _instantiate_finder(ctx)
+    team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
+    finder.team_metadata = team_metadata
 
     results = finder.find_trades(
         request_model.team_a,
@@ -137,6 +140,10 @@ def _build_trade_find_response(
                 narrative={team: str(msg) for team, msg in entry.get("narrative", {}).items()},
                 details=details_payload,
                 leaderboards=leaderboards_payload,
+                team_metadata=entry.get("team_metadata", {
+                    request_model.team_a: team_metadata.get(request_model.team_a, {}),
+                    request_model.team_b: team_metadata.get(request_model.team_b, {}),
+                }),
             )
         )
 
@@ -146,6 +153,7 @@ def _build_trade_find_response(
         evaluated_at=evaluated_at,
         baseline_combined={team: coerce_float(val) for team, val in baseline_combined.items()},
         proposals=proposals,
+        team_metadata=team_metadata,
     )
 
 
@@ -156,6 +164,8 @@ async def evaluate_trade_endpoint(
 ) -> TradeEvaluateResponse:
     ctx = manager.get()
     finder = _instantiate_finder(ctx)
+    team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
+    finder.team_metadata = team_metadata
 
     send_a = _convert_pieces(payload.send_a)
     send_b = _convert_pieces(payload.send_b)
@@ -233,6 +243,7 @@ async def evaluate_trade_endpoint(
         zero_sum_shift=zero_sum_shift,
         leaderboards=build_leaderboards_map(leaderboards_raw),
         details=details_payload,
+        team_metadata=team_metadata,
     )
 
 
