@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +12,53 @@ from fastapi.testclient import TestClient
 def _assert_json_keys(payload: dict[str, Any], keys: list[str]) -> None:
     for key in keys:
         assert key in payload, f"Expected key '{key}' in response payload"
+
+
+def test_history_power_rankings_endpoint(client: TestClient) -> None:
+    history_dir = Path("history/power_rankings")
+    history_dir.mkdir(parents=True, exist_ok=True)
+    created_at = datetime.now(timezone.utc).isoformat()
+    snapshot_path = history_dir / "test_snapshot_unit.json"
+    snapshot_payload = {
+        "createdAt": created_at,
+        "source": "unit.test",
+        "week": 99,
+        "tags": ["backfill", "unit"],
+        "settings": {"projection_scale_beta": 0.5},
+        "meta": {"note": "unit test"},
+        "teams": [
+            {
+                "team": "Example Team",
+                "rank": 1,
+                "combinedScore": 123.4,
+                "starterVOR": 12.3,
+                "benchScore": 4.5,
+                "starterProjection": 101.1,
+            }
+        ],
+    }
+    snapshot_path.write_text(json.dumps(snapshot_payload))
+    try:
+        response = client.get(
+            "/history/power-rankings",
+            params=[("sources", "unit.test"), ("includeTeams", "true")],
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        _assert_json_keys(payload, ["total", "snapshots"])
+        assert payload["total"] >= 1
+        assert payload["snapshots"], "Expected at least one snapshot in response"
+        snapshot = next(
+            (item for item in payload["snapshots"] if item["source"] == "unit.test"),
+            None,
+        )
+        assert snapshot is not None
+        assert snapshot["week"] == 99
+        assert snapshot["tags"] == ["backfill", "unit"]
+        team_entries = snapshot.get("teams") or []
+        assert team_entries and team_entries[0]["team"] == "Example Team"
+    finally:
+        snapshot_path.unlink(missing_ok=True)
 
 
 def test_league_history_endpoint(client: TestClient) -> None:

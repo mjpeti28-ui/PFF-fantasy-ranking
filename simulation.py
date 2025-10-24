@@ -120,9 +120,16 @@ class SimulationStore:
 
         for cfg_idx, cfg in enumerate(canonical_configs):
             if leagues_precomputed is None:
+                snapshot_metadata = {
+                    "source": "simulation.run_batch",
+                    "tags": ["simulation", "run"],
+                    "runId": run_id,
+                    "configIndex": cfg_idx,
+                }
                 league = evaluate_league(
                     rankings_path,
                     projections_path=projections_path,
+                    snapshot_metadata=snapshot_metadata,
                     **cfg,
                 )
             else:
@@ -290,9 +297,14 @@ class SimulationStore:
                 progress_callback(evaluations_done, total_expected)
 
         def evaluate_and_record(config: Dict[str, Any]) -> Dict[str, Any]:
+            snapshot_metadata = {
+                "source": "simulation.variance_refine",
+                "tags": ["simulation", "variance"],
+            }
             league = evaluate_league(
                 rankings_path,
                 projections_path=projections_path,
+                snapshot_metadata=snapshot_metadata,
                 **config,
             )
             combined_scores = league["combined_scores"]

@@ -25,6 +25,7 @@ from main import evaluate_league
 from playoffs import DEFAULT_PLAYOFF_TEAMS, DEFAULT_SCHEDULE_PATH, compute_playoff_predictions
 from optimizer import flatten_league_names
 from trading import TradeFinder
+from power_snapshots import build_snapshot_metadata
 
 router = APIRouter(prefix="/playoffs", tags=["playoffs"], dependencies=[Depends(require_api_key)])
 
@@ -304,10 +305,20 @@ async def playoff_trade_simulation(
     rankings_path = str(ctx.rankings_path)
     projections_path = str(ctx.projections_path) if ctx.projections_path else None
 
+    baseline_metadata = build_snapshot_metadata(
+        "api.playoffs.trade",
+        ctx,
+        tags=["api", "playoffs", "trade", "baseline"],
+        scenario="baseline",
+        teamA=payload.team_a,
+        teamB=payload.team_b,
+    )
+
     baseline_snapshot = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=deepcopy(rosters),
+        snapshot_metadata=baseline_metadata,
     )
 
     finder = TradeFinder(rankings_path, projections_path, build_baseline=False)
@@ -335,10 +346,20 @@ async def playoff_trade_simulation(
         send_b,
     )
 
+    scenario_metadata = build_snapshot_metadata(
+        "api.playoffs.trade",
+        ctx,
+        tags=["api", "playoffs", "trade", "scenario"],
+        scenario="scenario",
+        teamA=payload.team_a,
+        teamB=payload.team_b,
+    )
+
     scenario_snapshot = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=mutated_rosters,
+        snapshot_metadata=scenario_metadata,
     )
 
     baseline_predictions = compute_playoff_predictions(

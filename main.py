@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-from typing import Dict, List
-from pathlib import Path
 import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from data import load_rankings, build_lookups, load_rosters
+from datetime import datetime, timezone
 from optimizer import (
     flatten_league_names, optimize_lineups_first_pass, compute_worst_starter_bounds,
     optimize_lineups_second_pass
@@ -26,6 +27,7 @@ from scoring import (
     compute_zero_sum_view,
 )
 from config import PROJECTIONS_CSV, settings
+from power_snapshots import build_snapshot_metadata
 
 def hr(char="─", n=80):  # horizontal rule
     print(char * n)
@@ -183,6 +185,8 @@ def evaluate_league(
     scarcity_sample_step: float = 0.5,
     custom_rosters: Dict[str, Dict[str, List[str]]] | None = None,
     supplemental_path: str | None = None,
+    save_snapshot: bool = True,
+    snapshot_metadata: Optional[Dict[str, Any]] = None,
 ):
     default_beta = settings.get("projection_scale_beta")
     beta = default_beta if projection_scale_beta is None else projection_scale_beta
@@ -297,7 +301,7 @@ def evaluate_league(
         "scarcity_sample_step": scarcity_sample_step,
     }
 
-    return {
+    payload = {
         "df": df,
         "results": results,
         "repl_counts": repl_counts,
@@ -320,6 +324,29 @@ def evaluate_league(
         "settings": settings_snapshot,
         "rosters": copy.deepcopy(rosters),
     }
+
+    if save_snapshot:
+        try:
+            from power_snapshots import save_power_ranking_snapshot
+        except Exception:
+            # Snapshot persistence should never block evaluation results.
+            pass
+        else:
+            snapshot_meta = dict(snapshot_metadata or {})
+            snapshot_meta.setdefault("timestamp", datetime.now(timezone.utc))
+            save_power_ranking_snapshot(
+                leaderboard=payload["leaderboards"].get("combined"),
+                starters_totals=starters_totals,
+                bench_totals=bench_totals,
+                starter_projections=starter_projections,
+                metadata=snapshot_meta,
+                settings=settings_snapshot,
+                rankings_path=rankings_path,
+                projections_path=projections_path,
+                supplemental_path=supplemental_path,
+            )
+
+    return payload
 
 
 def evaluate_trade_scenario(
@@ -359,10 +386,19 @@ def evaluate_trade_scenario(
     adjust(team_a, send_a, send_b)
     adjust(team_b, send_b, send_a)
 
+    snapshot_metadata = build_snapshot_metadata(
+        "cli.trade.scenario",
+        None,
+        tags=["cli", "trade"],
+        teamA=team_a,
+        teamB=team_b,
+    )
+
     scenario = evaluate_league(
         str(DEFAULT_RANKINGS),
         projections_path=str(DEFAULT_PROJECTIONS),
         custom_rosters=rosters,
+        snapshot_metadata=snapshot_metadata,
     )
     combined = scenario["combined_scores"]
     baseline = league_data["combined_scores"]
@@ -373,9 +409,18 @@ def evaluate_trade_scenario(
 
 
 def main(rankings_path: str, projections_path: str | None = None, show_top_bench: int = 10, show_all_teams: bool = False):
+    snapshot_metadata = build_snapshot_metadata(
+        "cli.main",
+        None,
+        tags=["cli", "summary"],
+        showTopBench=show_top_bench,
+        showAllTeams=show_all_teams,
+    )
+
     league = evaluate_league(
         rankings_path,
         projections_path=projections_path,
+        snapshot_metadata=snapshot_metadata,
     )
 
     df = league["df"]

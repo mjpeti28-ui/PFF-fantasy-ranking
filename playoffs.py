@@ -653,6 +653,13 @@ def compute_playoff_predictions(
         league_snapshot = evaluate_league(
             str(rankings_resolved),
             projections_path=str(projections_resolved),
+            snapshot_metadata={
+                "source": "playoffs.compute",
+                "tags": ["playoffs", "baseline"],
+                "scheduleSource": schedule_source_path,
+                "numSimulations": num_simulations,
+                "playoffTeams": playoff_teams,
+            },
         )
 
     team_metrics = derive_team_metrics(schedule, team_catalog, league_snapshot)

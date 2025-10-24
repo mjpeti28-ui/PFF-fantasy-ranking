@@ -18,6 +18,7 @@ from espn_client import (
     parse_league_payload,
 )
 from main import evaluate_league
+from power_snapshots import build_snapshot_metadata
 
 
 @dataclass(frozen=True)
@@ -200,16 +201,26 @@ def _matchup_to_payload(
 def _build_power_rankings(
     ctx: LeagueDataContext,
     roster_map: Dict[str, Dict[str, List[str]]],
+    *,
+    week: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
     rankings_path = str(ctx.rankings_path)
     projections_path = str(ctx.projections_path) if ctx.projections_path else None
     supplemental_path = str(ctx.supplemental_path) if ctx.supplemental_path else None
+
+    metadata = build_snapshot_metadata(
+        "api.league.history",
+        ctx,
+        week=week,
+        tags=["history", f"week:{week}"] if week is not None else ["history"],
+    )
 
     evaluation = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=roster_map,
         supplemental_path=supplemental_path,
+        snapshot_metadata=metadata,
     )
 
     combined_leaderboard = evaluation["leaderboards"].get("combined", [])
@@ -273,7 +284,7 @@ def collect_week_history(
         power_rankings_summary: List[Dict[str, Any]] = []
         team_power_lookup: Dict[str, Dict[str, Any]] = {}
         if include_power_rankings:
-            power_rankings_summary, team_power_lookup = _build_power_rankings(ctx, roster_map)
+            power_rankings_summary, team_power_lookup = _build_power_rankings(ctx, roster_map, week=week)
 
         raw_teams: List[Dict[str, Any]] = payload.get("teams") or []
         raw_team_lookup: Dict[int, Dict[str, Any]] = {}

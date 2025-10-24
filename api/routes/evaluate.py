@@ -25,6 +25,7 @@ from api.utils import (
     build_zero_sum_shift,
     coerce_float,
 )
+from power_snapshots import build_snapshot_metadata
 
 router = APIRouter(prefix="/evaluate", tags=["evaluate"], dependencies=[Depends(require_api_key)])
 
@@ -98,11 +99,20 @@ async def evaluate_endpoint(
     if payload.scarcity_sample_step is not None:
         eval_kwargs["scarcity_sample_step"] = payload.scarcity_sample_step
 
+    request_summary = payload.model_dump(exclude={"rosters"}, exclude_none=True)
+    snapshot_metadata = build_snapshot_metadata(
+        "api.evaluate",
+        ctx,
+        tags=["api", "evaluate"],
+        request=request_summary,
+    )
+
     league = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=rosters_copy,
         supplemental_path=supplemental_path,
+        snapshot_metadata=snapshot_metadata,
         **eval_kwargs,
     )
 
@@ -182,20 +192,39 @@ async def evaluate_delta_endpoint(
     if payload.scarcity_sample_step is not None:
         eval_kwargs["scarcity_sample_step"] = payload.scarcity_sample_step
 
+    request_summary = payload.model_dump(exclude={"rosters"}, exclude_none=True)
+
+    baseline_metadata = build_snapshot_metadata(
+        "api.evaluate.delta",
+        ctx,
+        tags=["api", "evaluate", "delta", "baseline"],
+        scenario="baseline",
+        request=request_summary,
+    )
+
     baseline_league = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=copy.deepcopy(ctx.rosters),
         supplemental_path=supplemental_path,
+        snapshot_metadata=baseline_metadata,
         **eval_kwargs,
     )
 
     scenario_rosters = payload.rosters if payload.rosters is not None else ctx.rosters
+    scenario_metadata = build_snapshot_metadata(
+        "api.evaluate.delta",
+        ctx,
+        tags=["api", "evaluate", "delta", "scenario"],
+        scenario="scenario",
+        request=request_summary,
+    )
     scenario_league = evaluate_league(
         rankings_path,
         projections_path=projections_path,
         custom_rosters=copy.deepcopy(scenario_rosters),
         supplemental_path=supplemental_path,
+        snapshot_metadata=scenario_metadata,
         **eval_kwargs,
     )
 

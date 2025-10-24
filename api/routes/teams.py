@@ -6,6 +6,7 @@ from api.dependencies import get_context_manager, require_api_key
 from api.models import TeamDetail, TeamLeverageResponse, ZeroSumConcentrationRisk, ZeroSumEntry
 from api.utils import build_team_details, build_zero_sum_payload
 from context import ContextManager
+from power_snapshots import build_snapshot_metadata
 
 router = APIRouter(prefix="/teams", tags=["teams"], dependencies=[Depends(require_api_key)])
 
@@ -29,10 +30,18 @@ async def get_team(
     # Build an evaluation snapshot and extract this team's detail
     from main import evaluate_league  # local import to avoid circular at module import
 
+    snapshot_metadata = build_snapshot_metadata(
+        "api.teams.detail",
+        ctx,
+        tags=["api", "teams", "detail"],
+        team=team,
+    )
+
     league = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
         custom_rosters=ctx.rosters,
+        snapshot_metadata=snapshot_metadata,
     )
 
     results = league.get("results", {})
@@ -56,10 +65,18 @@ async def get_team_leverage(
 
     from main import evaluate_league  # local import to avoid circular dependency at module import time
 
+    snapshot_metadata = build_snapshot_metadata(
+        "api.teams.leverage",
+        ctx,
+        tags=["api", "teams", "leverage"],
+        team=team,
+    )
+
     league = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
         custom_rosters=ctx.rosters,
+        snapshot_metadata=snapshot_metadata,
     )
 
     zero_sum_raw = league.get("zero_sum", {})

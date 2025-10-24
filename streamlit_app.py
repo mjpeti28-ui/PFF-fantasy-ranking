@@ -1,7 +1,8 @@
 import copy
 import importlib
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import altair as alt
 import numpy as np
@@ -23,6 +24,7 @@ from trading import (
     PROJECTIONS_PATH,
 )
 from history_tracker import archive_if_changed
+from power_snapshots import POWER_HISTORY_DIR
 from optimizer import flatten_league_names
 from simulation import SimulationStore, generate_random_configs
 from epw import evaluate_trade_epw, compute_league_epw
@@ -59,6 +61,11 @@ def _get_evaluate_league():
 
 def evaluate_league_safe(*args, **kwargs):
     evaluate_fn = _get_evaluate_league()
+    if "snapshot_metadata" not in kwargs:
+        kwargs["snapshot_metadata"] = {
+            "source": "streamlit.app",
+            "tags": ["streamlit"],
+        }
     try:
         return evaluate_fn(*args, **kwargs)
     except TypeError:
@@ -66,6 +73,91 @@ def evaluate_league_safe(*args, **kwargs):
         importlib.reload(main_module)
         evaluate_fn = _get_evaluate_league()
         return evaluate_fn(*args, **kwargs)
+
+
+@st.cache_data(show_spinner=False)
+def load_power_history_tables() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if not POWER_HISTORY_DIR.exists():
+        return pd.DataFrame(), pd.DataFrame()
+
+    snapshot_rows: List[Dict[str, Any]] = []
+    team_rows: List[Dict[str, Any]] = []
+
+    for path in sorted(POWER_HISTORY_DIR.glob("*.json")):
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+
+        snapshot_id = path.stem
+        created_raw = data.get("createdAt")
+        created_at = pd.to_datetime(created_raw, utc=True, errors="coerce")
+        tags = data.get("tags") or []
+        if isinstance(tags, str):
+            tags = [tags]
+
+        base_row: Dict[str, Any] = {
+            "snapshot_id": snapshot_id,
+            "file": path.name,
+            "path": str(path),
+            "createdAt": created_at,
+            "source": data.get("source"),
+            "week": data.get("week"),
+            "rankingsPath": data.get("rankingsPath"),
+            "projectionsPath": data.get("projectionsPath"),
+            "supplementalPath": data.get("supplementalPath"),
+            "tags": tuple(tags),
+            "tags_str": ", ".join(tags),
+        }
+
+        settings = data.get("settings") or {}
+        for key, value in settings.items():
+            col = f"setting::{key}"
+            base_row[col] = value
+
+        meta = data.get("meta") or {}
+        if isinstance(meta, dict):
+            for key, value in meta.items():
+                if key in base_row:
+                    continue
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    base_row[f"meta::{key}"] = value
+
+        snapshot_rows.append(base_row)
+
+        teams_payload = data.get("teams") or []
+        for team_entry in teams_payload:
+            team_row = {
+                "snapshot_id": snapshot_id,
+                "team": team_entry.get("team"),
+                "rank": team_entry.get("rank"),
+                "combinedScore": team_entry.get("combinedScore"),
+                "starterVOR": team_entry.get("starterVOR"),
+                "benchScore": team_entry.get("benchScore"),
+                "starterProjection": team_entry.get("starterProjection"),
+            }
+            team_row.update({
+                "createdAt": created_at,
+                "source": base_row["source"],
+                "week": base_row["week"],
+                "tags": base_row["tags"],
+                "tags_str": base_row["tags_str"],
+                "rankingsPath": base_row.get("rankingsPath"),
+                "projectionsPath": base_row.get("projectionsPath"),
+                "supplementalPath": base_row.get("supplementalPath"),
+            })
+            for key, value in base_row.items():
+                if key.startswith("setting::") or key.startswith("meta::"):
+                    team_row[key] = value
+            team_rows.append(team_row)
+
+    snapshots_df = pd.DataFrame(snapshot_rows)
+    teams_df = pd.DataFrame(team_rows)
+    if not snapshots_df.empty:
+        snapshots_df = snapshots_df.sort_values("createdAt", na_position="first").reset_index(drop=True)
+    if not teams_df.empty:
+        teams_df = teams_df.sort_values(["team", "createdAt"], na_position="first").reset_index(drop=True)
+    return snapshots_df, teams_df
 
 
 def format_player_list(players: List[tuple[str, str]]) -> str:
@@ -1518,6 +1610,185 @@ def render_power_rankings(teams: List[str]) -> None:
         st.json(settings_used)
 
 
+def render_history_explorer() -> None:
+    snapshots_df, teams_df = load_power_history_tables()
+    if snapshots_df.empty:
+        st.info("No power-ranking snapshots have been saved yet. Run a league evaluation to populate history.")
+        return
+
+    st.caption("Explore saved power ranking snapshots, filter by metadata, and visualise trends over time.")
+
+    available_sources = sorted([src for src in snapshots_df["source"].dropna().unique()])
+    tag_pool = sorted({tag for tags in snapshots_df["tags"] if isinstance(tags, (list, tuple)) for tag in tags})
+
+    preset_options = {
+        "All snapshots": {"sources": None, "tags": None},
+        "Historical (archived rankings/projections)": {"sources": ["backfill.historical"], "tags": ["backfill", "archived"]},
+        "Historical (current rankings/projections)": {"sources": ["backfill.historical-current"], "tags": ["backfill", "current"]},
+    }
+
+    def _default_selection(values: Optional[Sequence[str]], available: Sequence[str]) -> List[str]:
+        if not available:
+            return []
+        if not values:
+            return list(available)
+        filtered = [val for val in values if val in available]
+        return filtered if filtered else list(available)
+
+    if "history_applied_preset" not in st.session_state:
+        st.session_state["history_applied_preset"] = None
+        st.session_state["history_source_selection"] = list(available_sources)
+        st.session_state["history_tag_selection"] = []
+
+    preset_label = st.selectbox("Preset view", list(preset_options.keys()), key="history_preset_view")
+    preset_config = preset_options[preset_label]
+    desired_sources = _default_selection(preset_config["sources"], available_sources)
+    desired_tags = _default_selection(preset_config["tags"], tag_pool)
+
+    if st.session_state.get("history_applied_preset") != preset_label:
+        st.session_state["history_source_selection"] = desired_sources
+        st.session_state["history_tag_selection"] = desired_tags
+        st.session_state["history_applied_preset"] = preset_label
+
+    filters = st.columns(3)
+    with filters[0]:
+        source_selection = st.multiselect(
+            "Sources",
+            available_sources,
+            default=st.session_state.get("history_source_selection", desired_sources),
+            key="history_source_selection",
+        )
+
+    available_weeks = sorted([int(week) for week in snapshots_df["week"].dropna().unique()])
+    with filters[1]:
+        week_selection = st.multiselect("Weeks", available_weeks, default=available_weeks) if available_weeks else []
+
+    with filters[2]:
+        tag_selection = st.multiselect(
+            "Tags",
+            tag_pool,
+            default=st.session_state.get("history_tag_selection", desired_tags),
+            key="history_tag_selection",
+        )
+
+    date_range = None
+    if not snapshots_df["createdAt"].isna().all():
+        min_date = snapshots_df["createdAt"].min()
+        max_date = snapshots_df["createdAt"].max()
+        if pd.notna(min_date) and pd.notna(max_date):
+            date_range = st.date_input("Created date range", (min_date.date(), max_date.date()))
+
+    filtered_snapshots = snapshots_df.copy()
+    if source_selection:
+        filtered_snapshots = filtered_snapshots[filtered_snapshots["source"].isin(source_selection)]
+    if week_selection:
+        filtered_snapshots = filtered_snapshots[filtered_snapshots["week"].isin(week_selection)]
+    if tag_selection:
+        tag_set = set(tag_selection)
+        filtered_snapshots = filtered_snapshots[
+            filtered_snapshots["tags"].apply(lambda tags: bool(tag_set.intersection(tags)))
+        ]
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        start_ts = pd.Timestamp(start_date).tz_localize("UTC")
+        end_ts = pd.Timestamp(end_date).tz_localize("UTC") + pd.Timedelta(days=1)
+        filtered_snapshots = filtered_snapshots[
+            (filtered_snapshots["createdAt"] >= start_ts) & (filtered_snapshots["createdAt"] < end_ts)
+        ]
+
+    if filtered_snapshots.empty:
+        st.warning("No snapshots match the current filter selection.")
+        return
+
+    teams_filtered = teams_df[teams_df["snapshot_id"].isin(filtered_snapshots["snapshot_id"])]
+    available_teams = sorted([team for team in teams_filtered["team"].dropna().unique()])
+    default_teams = available_teams[: min(6, len(available_teams))]
+    selected_teams = st.multiselect("Teams", available_teams, default=default_teams)
+    if selected_teams:
+        teams_filtered = teams_filtered[teams_filtered["team"].isin(selected_teams)]
+
+    setting_cols = [col for col in filtered_snapshots.columns if col.startswith("setting::")]
+    setting_name_map = {col.split("::", 1)[1]: col for col in setting_cols}
+    color_choice = st.selectbox("Colour series by knob", ["(none)"] + sorted(setting_name_map.keys()))
+    color_column = setting_name_map.get(color_choice)
+
+    chart_mode = "Created Timestamp"
+    if not teams_filtered["week"].isna().all():
+        chart_mode = st.radio("X-axis", ["Created Timestamp", "Week"], horizontal=True)
+
+    summary_cols = [
+        "createdAt",
+        "source",
+        "week",
+        "tags_str",
+        "rankingsPath",
+        "projectionsPath",
+        "supplementalPath",
+    ]
+    summary_table = filtered_snapshots[summary_cols].copy()
+    summary_table["createdAt"] = summary_table["createdAt"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    metrics = st.columns(3)
+    metrics[0].metric("Snapshots", len(filtered_snapshots))
+    metrics[1].metric("Teams tracked", len(selected_teams) or len(available_teams))
+    metrics[2].metric("Data points", len(teams_filtered))
+
+    st.dataframe(summary_table, use_container_width=True)
+
+    if teams_filtered.empty:
+        st.warning("No team-level records after filtering.")
+        return
+
+    chart_df = teams_filtered.copy()
+    if color_column:
+        chart_df["series_colour"] = chart_df[color_column]
+    else:
+        chart_df["series_colour"] = chart_df["team"]
+
+    x_encoding = (
+        alt.X("createdAt:T", title="Snapshot timestamp")
+        if chart_mode == "Created Timestamp"
+        else alt.X("week:Q", title="Week")
+    )
+    color_title = color_choice if color_column else "Team"
+
+    chart = (
+        alt.Chart(chart_df)
+        .mark_line(point=True)
+        .encode(
+            x=x_encoding,
+            y=alt.Y("combinedScore:Q", title="Combined Score"),
+            color=alt.Color("series_colour:N", title=color_title),
+            detail="team:N",
+            tooltip=[
+                "team",
+                "combinedScore",
+                "rank",
+                "createdAt:T",
+                "week",
+                alt.Tooltip("series_colour:N", title=color_title),
+            ],
+        )
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+    if color_column:
+        pivot = (
+            chart_df.groupby(["series_colour", "team"])["combinedScore"]
+            .agg(["mean", "std", "count"])
+            .reset_index()
+            .rename(
+                columns={
+                    "series_colour": color_choice,
+                    "mean": "Avg Combined",
+                    "std": "Std Dev",
+                    "count": "Observations",
+                }
+            )
+        )
+        st.dataframe(pivot, use_container_width=True)
+
+
 def render_playoff_predictor(teams: List[str]) -> None:
     ctx = context_manager.get()
     schedule_df = ctx.schedule if not ctx.schedule.empty else None
@@ -2631,6 +2902,7 @@ def main() -> None:
     mode_options = [
         "Trade Finder",
         "Power Rankings",
+        "History Explorer",
         "Playoff Predictor",
         "Simulation Playground",
         "Add/Drop Impact",
@@ -2645,6 +2917,9 @@ def main() -> None:
     elif mode == "Power Rankings":
         st.subheader("Power Rankings")
         render_power_rankings(teams)
+    elif mode == "History Explorer":
+        st.subheader("History Explorer")
+        render_history_explorer()
     elif mode == "Playoff Predictor":
         st.subheader("Playoff Predictor")
         render_playoff_predictor(teams)

@@ -6,6 +6,7 @@ from api.routes import (
     config,
     evaluate,
     health,
+    history,
     jobs,
     league,
     playoffs,
@@ -28,6 +29,7 @@ app.include_router(evaluate.router)
 app.include_router(players.router)
 app.include_router(playoffs.router)
 app.include_router(rankings.router)
+app.include_router(history.router)
 app.include_router(stats.router)
 app.include_router(sources.router)
 app.include_router(teams.router)

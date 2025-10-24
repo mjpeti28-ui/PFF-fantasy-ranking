@@ -211,6 +211,38 @@ class LeagueHistoryResponse(BaseModel):
     request: Optional[HistoryRequestEcho] = None
     weeks: List[HistoryWeekSnapshot]
 
+
+class PowerSnapshotTeam(BaseModel):
+    team: Optional[str] = None
+    rank: Optional[int] = None
+    combined_score: Optional[float] = Field(default=None, alias="combinedScore")
+    starter_vor: Optional[float] = Field(default=None, alias="starterVOR")
+    bench_score: Optional[float] = Field(default=None, alias="benchScore")
+    starter_projection: Optional[float] = Field(default=None, alias="starterProjection")
+
+
+class PowerSnapshotRecord(BaseModel):
+    snapshot_id: str = Field(..., alias="snapshotId")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    source: Optional[str] = None
+    week: Optional[int] = None
+    tags: List[str] = Field(default_factory=list)
+    rankings_path: Optional[str] = Field(default=None, alias="rankingsPath")
+    projections_path: Optional[str] = Field(default=None, alias="projectionsPath")
+    supplemental_path: Optional[str] = Field(default=None, alias="supplementalPath")
+    file: Optional[str] = None
+    path: Optional[str] = None
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+    teams: Optional[List[PowerSnapshotTeam]] = None
+
+
+class PowerSnapshotResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    snapshots: List[PowerSnapshotRecord]
+
 class MessageResponse(BaseModel):
     message: str
 

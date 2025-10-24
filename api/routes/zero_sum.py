@@ -6,6 +6,7 @@ from api.dependencies import get_context_manager, require_api_key
 from api.models import ZeroSumEntry, ZeroSumPositionResponse
 from api.utils import build_zero_sum_payload
 from context import ContextManager
+from power_snapshots import build_snapshot_metadata
 
 router = APIRouter(prefix="/zero-sum", tags=["zero-sum"], dependencies=[Depends(require_api_key)])
 
@@ -36,10 +37,18 @@ async def zero_sum_position_endpoint(
     ctx = manager.get()
     from main import evaluate_league  # local import to avoid circular import at module load time
 
+    snapshot_metadata = build_snapshot_metadata(
+        "api.zero_sum.position",
+        ctx,
+        tags=["api", "zero-sum", pos.upper()],
+        position=pos.upper(),
+    )
+
     league = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
         custom_rosters=ctx.rosters,
+        snapshot_metadata=snapshot_metadata,
     )
 
     zero_sum_raw = league.get("zero_sum", {})

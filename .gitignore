@@ -7,3 +7,4 @@ __pycache__/
 !.env.example
 .venv
 .venv_streamlit
+history/power_rankings/

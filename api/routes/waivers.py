@@ -17,6 +17,7 @@ from config import settings
 from context import ContextManager
 from data import normalize_name
 from main import evaluate_league
+from power_snapshots import build_snapshot_metadata
 
 router = APIRouter(prefix="/waivers", tags=["waivers"], dependencies=[Depends(require_api_key)])
 
@@ -32,9 +33,20 @@ async def waiver_candidates(
     ctx = manager.get()
     team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
 
+    snapshot_metadata = build_snapshot_metadata(
+        "api.waivers.candidates",
+        ctx,
+        tags=["api", "waivers", "candidates"],
+        teamFilter=team,
+        positionFilter=position.upper() if position else None,
+        limit=limit,
+        offset=offset,
+    )
+
     league = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
+        snapshot_metadata=snapshot_metadata,
     )
 
     df = league["df"].copy()
@@ -163,10 +175,21 @@ async def waiver_recommend(
     ctx = manager.get()
     from main import evaluate_league  # avoid circular import at module load
 
+    team_metadata = build_team_metadata_map(ctx.rosters, ctx.espn_league)
+
+    baseline_metadata = build_snapshot_metadata(
+        "api.waivers.recommend",
+        ctx,
+        tags=["api", "waivers", "recommend", "baseline"],
+        scenario="baseline",
+        changeCount=len(payload.changes),
+    )
+
     baseline = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
         custom_rosters=ctx.rosters,
+        snapshot_metadata=baseline_metadata,
     )
 
     df = baseline["df"].copy()
@@ -214,10 +237,19 @@ async def waiver_recommend(
             mutated[team_name].setdefault(position, [])
             mutated[team_name][position].append(add)
 
+    scenario_metadata = build_snapshot_metadata(
+        "api.waivers.recommend",
+        ctx,
+        tags=["api", "waivers", "recommend", "scenario"],
+        scenario="post-change",
+        affectedTeams=sorted(affected_teams),
+    )
+
     new_eval = evaluate_league(
         str(ctx.rankings_path),
         projections_path=str(ctx.projections_path) if ctx.projections_path else None,
         custom_rosters=mutated,
+        snapshot_metadata=scenario_metadata,
     )
 
     baseline_combined = baseline["combined_scores"]

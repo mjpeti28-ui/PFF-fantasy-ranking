@@ -329,6 +329,51 @@ components:
           type: array
           items: {$ref: '#/components/schemas/HistoryWeekSnapshot'}
       required: [generatedAt, weeks]
+    PowerSnapshotTeam:
+      type: object
+      properties:
+        team: {type: string, nullable: true}
+        rank: {type: integer, nullable: true}
+        combinedScore: {type: number, format: float, nullable: true}
+        starterVOR: {type: number, format: float, nullable: true}
+        benchScore: {type: number, format: float, nullable: true}
+        starterProjection: {type: number, format: float, nullable: true}
+    PowerSnapshotRecord:
+      type: object
+      properties:
+        snapshotId: {type: string}
+        createdAt: {type: string, format: date-time, nullable: true}
+        source: {type: string, nullable: true}
+        week: {type: integer, nullable: true}
+        tags:
+          type: array
+          items: {type: string}
+        rankingsPath: {type: string, nullable: true}
+        projectionsPath: {type: string, nullable: true}
+        supplementalPath: {type: string, nullable: true}
+        file: {type: string, nullable: true}
+        path: {type: string, nullable: true}
+        settings:
+          type: object
+          additionalProperties: {}
+        meta:
+          type: object
+          additionalProperties: {}
+        teams:
+          type: array
+          nullable: true
+          items: {$ref: '#/components/schemas/PowerSnapshotTeam'}
+      required: [snapshotId, tags, settings, meta]
+    PowerSnapshotResponse:
+      type: object
+      properties:
+        total: {type: integer}
+        limit: {type: integer}
+        offset: {type: integer}
+        snapshots:
+          type: array
+          items: {$ref: '#/components/schemas/PowerSnapshotRecord'}
+      required: [total, limit, offset, snapshots]
     PlayerSummary:
       type: object
       properties:
@@ -1318,6 +1363,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeagueActivityResponse'
+  /history/power-rankings:
+    get:
+      tags: [history]
+      summary: List saved power ranking snapshots
+      operationId: listPowerHistory
+      x-openai-isConsequential: false
+      parameters:
+        - name: sources
+          in: query
+          schema:
+            type: array
+            items: {type: string}
+          style: form
+          explode: true
+          description: Filter by one or more snapshot sources.
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items: {type: string}
+          style: form
+          explode: true
+          description: Require snapshots to contain all of the supplied tags.
+        - name: weeks
+          in: query
+          schema:
+            type: array
+            items: {type: integer}
+          style: form
+          explode: true
+          description: Limit to specific weeks.
+        - name: startDate
+          in: query
+          schema: {type: string, format: date-time}
+          description: Earliest snapshot timestamp (inclusive).
+        - name: endDate
+          in: query
+          schema: {type: string, format: date-time}
+          description: Latest snapshot timestamp (inclusive).
+        - name: includeTeams
+          in: query
+          schema: {type: boolean, default: false}
+          description: Include per-team values for each snapshot.
+        - name: limit
+          in: query
+          schema: {type: integer, default: 100, minimum: 1, maximum: 500}
+        - name: offset
+          in: query
+          schema: {type: integer, default: 0, minimum: 0}
+      responses:
+        '200':
+          description: Snapshot list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PowerSnapshotResponse'
   /league/history:
     post:
       tags: [league]
