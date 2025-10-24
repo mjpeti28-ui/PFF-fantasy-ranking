@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
@@ -16,7 +16,7 @@ from alias import build_alias_map
 from config import PROJECTIONS_CSV, settings
 from data import build_lookups, load_rankings, load_projections, load_rosters
 from optimizer import flatten_league_names
-from espn_client import ESPNLeagueData, get_last_league_state
+from espn_client import ESPNLeagueData, get_last_league_state, league_schedule_to_dataframe
 
 STATS_DIR = Path("Stats")
 SOS_DIR = Path("StrengthOfSchedule")
@@ -31,6 +31,7 @@ def _resolve_data_path(name: str) -> Path:
 
 DEFAULT_RANKINGS_PATH = _resolve_data_path(os.getenv("RANKINGS_CSV", "ROS_week_2_PFF_rankings.csv"))
 DEFAULT_SUPPLEMENTAL_PATH = _resolve_data_path(os.getenv("SUPPLEMENTAL_RANKINGS_CSV", "PFF_rankings.csv"))
+DEFAULT_SCHEDULE_PATH = _resolve_data_path(os.getenv("SCHEDULE_CSV", "schedule.csv"))
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ class LeagueDataContext:
     stats_data: Dict[str, pd.DataFrame]
     sos_data: Dict[str, pd.DataFrame]
     espn_league: Optional[ESPNLeagueData] = None
+    schedule: pd.DataFrame = field(default_factory=pd.DataFrame)
+    schedule_source: Optional[str] = None
 
 
 def build_context(
@@ -94,6 +97,21 @@ def build_context(
     stats_data = _load_stats_data()
     sos_data = _load_sos_data()
     espn_league = get_last_league_state()
+    schedule_source = None
+    schedule = pd.DataFrame()
+
+    if espn_league is not None:
+        schedule = league_schedule_to_dataframe(espn_league)
+        schedule_source = "ESPN"
+    elif DEFAULT_SCHEDULE_PATH.exists():
+        try:
+            from playoffs import load_schedule
+
+            schedule = load_schedule(str(DEFAULT_SCHEDULE_PATH))
+            schedule_source = str(DEFAULT_SCHEDULE_PATH)
+        except Exception:
+            schedule = pd.DataFrame()
+            schedule_source = None
 
     snapshot = LeagueDataContext(
         dataframe=df,
@@ -113,6 +131,8 @@ def build_context(
         stats_data=stats_data,
         sos_data=sos_data,
         espn_league=espn_league,
+        schedule=schedule,
+        schedule_source=schedule_source,
     )
     return snapshot
 
@@ -202,6 +222,7 @@ class ContextManager:
             "team_count": len(ctx.rosters),
             "player_count": int(ctx.dataframe.shape[0]),
             "espn": espn_meta,
+            "schedule_source": ctx.schedule_source,
         }
 
 

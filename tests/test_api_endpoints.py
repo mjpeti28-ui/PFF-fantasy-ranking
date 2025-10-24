@@ -11,6 +11,26 @@ def _assert_json_keys(payload: dict[str, Any], keys: list[str]) -> None:
         assert key in payload, f"Expected key '{key}' in response payload"
 
 
+def test_league_history_endpoint(client: TestClient) -> None:
+    payload = {
+        "window": "explicit",
+        "weeks": [1],
+        "includeRosters": False,
+        "includeMatchups": False,
+        "includePlayerStats": False,
+        "includePowerRankings": False,
+    }
+    resp = client.post("/league/history", json=payload)
+    if resp.status_code == 503:
+        pytest.skip("ESPN data unavailable for history endpoint")
+    assert resp.status_code == 200
+    data = resp.json()
+    _assert_json_keys(data, ["generatedAt", "weeks"])
+    assert data["weeks"], "Expected at least one week in response"
+    week = data["weeks"][0]
+    _assert_json_keys(week, ["week", "teams"])
+
+
 def test_players_endpoint(client: TestClient) -> None:
     resp = client.get("/players", params={"pos": "RB", "metric": "proj", "limit": 3})
     assert resp.status_code == 200

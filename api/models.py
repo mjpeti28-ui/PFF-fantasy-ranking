@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ConfigResponse(BaseModel):
@@ -30,6 +30,7 @@ class LeagueMetadataResponse(BaseModel):
     supplemental_path: Optional[str] = None
     settings: Dict[str, Any]
     espn: Optional[Dict[str, Any]] = None
+    schedule_source: Optional[str] = Field(default=None, alias="schedule_source")
 
 
 class LeagueReloadRequest(BaseModel):
@@ -38,6 +39,177 @@ class LeagueReloadRequest(BaseModel):
     supplemental_path: Optional[str] = None
     projection_scale_beta: Optional[float] = None
 
+
+class LeagueActivityMessage(BaseModel):
+    action: str
+    player_id: Optional[int] = Field(default=None, alias="playerId")
+    player_name: Optional[str] = Field(default=None, alias="playerName")
+    from_team: Optional[str] = Field(default=None, alias="fromTeam")
+    to_team: Optional[str] = Field(default=None, alias="toTeam")
+    raw: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LeagueActivity(BaseModel):
+    id: str
+    type: str
+    timestamp: Optional[str] = None
+    team_id: Optional[int] = Field(default=None, alias="teamId")
+    team: Optional[str] = None
+    summary: Optional[str] = None
+    items: List[LeagueActivityMessage] = Field(default_factory=list)
+
+
+class LeagueActivityResponse(BaseModel):
+    activities: List[LeagueActivity]
+
+
+class LeagueHistoryWindow(str, Enum):
+    EXPLICIT = "explicit"
+    RANGE = "range"
+    TO_DATE = "to-date"
+    FULL_SEASON = "full-season"
+
+
+class HistoryWeekRange(BaseModel):
+    start: int
+    end: int
+
+
+class LeagueHistoryRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    window: LeagueHistoryWindow = Field(default=LeagueHistoryWindow.TO_DATE)
+    weeks: Optional[List[int]] = None
+    week_range: Optional[HistoryWeekRange] = Field(default=None, alias="weekRange")
+    teams: Optional[List[str]] = None
+    include_rosters: bool = Field(default=True, alias="includeRosters")
+    include_matchups: bool = Field(default=True, alias="includeMatchups")
+    include_player_stats: bool = Field(default=False, alias="includePlayerStats")
+    include_power_rankings: bool = Field(default=True, alias="includePowerRankings")
+
+    @model_validator(mode="after")
+    def _validate_window(self):
+        if self.window == LeagueHistoryWindow.EXPLICIT:
+            if not self.weeks:
+                raise ValueError("Explicit window requires at least one week.")
+        if self.window == LeagueHistoryWindow.RANGE:
+            if self.week_range is None:
+                raise ValueError("Range window requires weekRange.")
+            if self.week_range.start <= 0 or self.week_range.end <= 0:
+                raise ValueError("Week ranges must be positive.")
+            if self.week_range.start > self.week_range.end:
+                raise ValueError("weekRange.start must be <= weekRange.end.")
+        return self
+
+
+class HistoryStatSnapshot(BaseModel):
+    stat_source_id: Optional[int] = Field(default=None, alias="statSourceId")
+    stat_split_type_id: Optional[int] = Field(default=None, alias="statSplitTypeId")
+    fantasy_points: Optional[float] = Field(default=None, alias="fantasyPoints")
+    applied_stats: Dict[str, float] = Field(default_factory=dict, alias="appliedStats")
+    raw_stats: Dict[str, float] = Field(default_factory=dict, alias="rawStats")
+
+
+class HistoryPlayerStats(BaseModel):
+    projected: Optional[HistoryStatSnapshot] = None
+    actual: Optional[HistoryStatSnapshot] = None
+
+
+class HistoryEligibleSlot(BaseModel):
+    slot_id: Optional[int] = Field(default=None, alias="slotId")
+    slot_name: Optional[str] = Field(default=None, alias="slotName")
+
+
+class HistoryPlayerSummary(BaseModel):
+    player_id: Optional[int] = Field(default=None, alias="playerId")
+    name: Optional[str] = None
+    position_id: Optional[int] = Field(default=None, alias="positionId")
+    position: Optional[str] = None
+    pro_team_id: Optional[int] = Field(default=None, alias="proTeamId")
+    eligible_slots: List[HistoryEligibleSlot] = Field(default_factory=list, alias="eligibleSlots")
+    lineup_slot_id: Optional[int] = Field(default=None, alias="lineupSlotId")
+    lineup_slot: Optional[str] = Field(default=None, alias="lineupSlot")
+    injury_status: Optional[str] = Field(default=None, alias="injuryStatus")
+    is_injured: bool = Field(default=False, alias="isInjured")
+    on_ir: bool = Field(default=False, alias="onIR")
+    stats: Optional[HistoryPlayerStats] = None
+
+
+class HistoryPowerMetrics(BaseModel):
+    team_slug: Optional[str] = Field(default=None, alias="teamSlug")
+    rank: Optional[int] = None
+    combined_score: Optional[float] = Field(default=None, alias="combinedScore")
+    starter_vor: Optional[float] = Field(default=None, alias="starterVOR")
+    bench_score: Optional[float] = Field(default=None, alias="benchScore")
+    starter_projection: Optional[float] = Field(default=None, alias="starterProjection")
+
+
+class HistoryTeamSnapshot(BaseModel):
+    team_id: int = Field(..., alias="teamId")
+    team_slug: str = Field(..., alias="teamSlug")
+    team_name: str = Field(..., alias="teamName")
+    managers: List[str] = Field(default_factory=list)
+    record: Dict[str, Any] = Field(default_factory=dict)
+    roster: Optional[List[HistoryPlayerSummary]] = None
+    power_metrics: Optional[HistoryPowerMetrics] = Field(default=None, alias="powerMetrics")
+
+
+class HistoryMatchupSide(BaseModel):
+    team_id: Optional[int] = Field(default=None, alias="teamId")
+    team_slug: Optional[str] = Field(default=None, alias="teamSlug")
+    team_name: Optional[str] = Field(default=None, alias="teamName")
+    points: Optional[float] = None
+
+
+class HistoryMatchupSummary(BaseModel):
+    matchup_id: Optional[int] = Field(default=None, alias="matchupId")
+    week: Optional[int] = None
+    winner: Optional[str] = None
+    is_playoff: Optional[bool] = Field(default=None, alias="isPlayoff")
+    home: HistoryMatchupSide
+    away: HistoryMatchupSide
+
+
+class HistoryPowerRankingEntry(BaseModel):
+    team_slug: str = Field(..., alias="teamSlug")
+    team: str
+    rank: int
+    combined_score: Optional[float] = Field(default=None, alias="combinedScore")
+    starter_vor: Optional[float] = Field(default=None, alias="starterVOR")
+    bench_score: Optional[float] = Field(default=None, alias="benchScore")
+    starter_projection: Optional[float] = Field(default=None, alias="starterProjection")
+
+
+class HistoryWeekSnapshot(BaseModel):
+    week: int
+    label: Optional[str] = None
+    teams: List[HistoryTeamSnapshot]
+    matchups: Optional[List[HistoryMatchupSummary]] = None
+    power_rankings: Optional[List[HistoryPowerRankingEntry]] = Field(default=None, alias="powerRankings")
+
+
+class HistoryLeagueInfo(BaseModel):
+    league_id: Optional[str] = Field(default=None, alias="leagueId")
+    season: Optional[int] = None
+    latest_scoring_period: Optional[int] = Field(default=None, alias="latestScoringPeriod")
+    current_matchup_period: Optional[int] = Field(default=None, alias="currentMatchupPeriod")
+
+
+class HistoryRequestEcho(BaseModel):
+    window: LeagueHistoryWindow
+    weeks: List[int]
+    teams: List[str]
+    include_rosters: bool = Field(..., alias="includeRosters")
+    include_matchups: bool = Field(..., alias="includeMatchups")
+    include_player_stats: bool = Field(..., alias="includePlayerStats")
+    include_power_rankings: bool = Field(..., alias="includePowerRankings")
+
+
+class LeagueHistoryResponse(BaseModel):
+    generated_at: datetime = Field(..., alias="generatedAt")
+    league: Optional[HistoryLeagueInfo] = None
+    request: Optional[HistoryRequestEcho] = None
+    weeks: List[HistoryWeekSnapshot]
 
 class MessageResponse(BaseModel):
     message: str

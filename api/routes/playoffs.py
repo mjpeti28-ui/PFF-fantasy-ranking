@@ -88,7 +88,8 @@ def _build_playoff_response(
     *,
     simulations: int,
     playoff_teams: int,
-    schedule_resolved: Path,
+    schedule_resolved: Optional[Path] = None,
+    schedule_label: Optional[str] = None,
 ) -> PlayoffOddsResponse:
     standings_payload = [
         PlayoffStanding(
@@ -140,12 +141,15 @@ def _build_playoff_response(
     pending_weeks = [
         int(week) for week in sim_meta.get("pending_weeks", []) if week is not None
     ]
+    schedule_path_label = schedule_label or sim_meta.get("schedule_path")
+    if not schedule_path_label:
+        schedule_path_label = str(schedule_resolved) if schedule_resolved else "ESPN"
     simulation_payload = PlayoffSimulationMeta(
         runs=int(sim_meta.get("runs", simulations)),
         playoffSpots=int(sim_meta.get("playoff_spots", playoff_teams)),
         seed=sim_meta.get("seed"),
         pendingWeeks=pending_weeks,
-        schedulePath=sim_meta.get("schedule_path", str(schedule_resolved)),
+        schedulePath=schedule_path_label,
     )
 
     return PlayoffOddsResponse(
@@ -223,14 +227,21 @@ async def get_playoff_odds(
     manager: ContextManager = Depends(get_context_manager),
 ) -> PlayoffOddsResponse:
     ctx = manager.get()
-    schedule_resolved = _resolve_schedule_path(schedule_path)
-
+    schedule_df = ctx.schedule if not ctx.schedule.empty else None
+    schedule_label = ctx.schedule_source
+    schedule_resolved: Optional[Path] = None
+    if schedule_path:
+        schedule_resolved = _resolve_schedule_path(schedule_path)
+        schedule_df = None
+        schedule_label = str(schedule_resolved)
     rankings_path = str(ctx.rankings_path)
     projections_path = str(ctx.projections_path) if ctx.projections_path else None
 
     try:
         predictions = compute_playoff_predictions(
-            schedule_path=str(schedule_resolved),
+            schedule_path=str(schedule_resolved) if schedule_resolved else None,
+            schedule_df=schedule_df,
+            schedule_label=schedule_label,
             rankings_path=rankings_path,
             projections_path=projections_path,
             num_simulations=simulations,
@@ -250,6 +261,7 @@ async def get_playoff_odds(
         simulations=simulations,
         playoff_teams=playoff_teams,
         schedule_resolved=schedule_resolved,
+        schedule_label=schedule_label,
     )
 
 
@@ -263,7 +275,13 @@ async def playoff_trade_simulation(
     manager: ContextManager = Depends(get_context_manager),
 ) -> PlayoffTradeResponse:
     ctx = manager.get()
-    schedule_resolved = _resolve_schedule_path(payload.schedule_path)
+    schedule_df = ctx.schedule if not ctx.schedule.empty else None
+    schedule_label = ctx.schedule_source
+    schedule_resolved: Optional[Path] = None
+    if payload.schedule_path:
+        schedule_resolved = _resolve_schedule_path(payload.schedule_path)
+        schedule_df = None
+        schedule_label = str(schedule_resolved)
 
     rosters = ctx.rosters
     if payload.team_a not in rosters:
@@ -324,7 +342,9 @@ async def playoff_trade_simulation(
     )
 
     baseline_predictions = compute_playoff_predictions(
-        schedule_path=str(schedule_resolved),
+        schedule_path=str(schedule_resolved) if schedule_resolved else None,
+        schedule_df=schedule_df,
+        schedule_label=schedule_label,
         rankings_path=rankings_path,
         projections_path=projections_path,
         num_simulations=payload.simulations,
@@ -335,7 +355,9 @@ async def playoff_trade_simulation(
     )
 
     scenario_predictions = compute_playoff_predictions(
-        schedule_path=str(schedule_resolved),
+        schedule_path=str(schedule_resolved) if schedule_resolved else None,
+        schedule_df=schedule_df,
+        schedule_label=schedule_label,
         rankings_path=rankings_path,
         projections_path=projections_path,
         num_simulations=payload.simulations,
@@ -350,12 +372,14 @@ async def playoff_trade_simulation(
         simulations=payload.simulations,
         playoff_teams=payload.playoff_teams,
         schedule_resolved=schedule_resolved,
+        schedule_label=schedule_label,
     )
     scenario_response = _build_playoff_response(
         scenario_predictions,
         simulations=payload.simulations,
         playoff_teams=payload.playoff_teams,
         schedule_resolved=schedule_resolved,
+        schedule_label=schedule_label,
     )
     deltas = _build_delta_payload(baseline_predictions, scenario_predictions)
 

@@ -28,10 +28,9 @@ from simulation import SimulationStore, generate_random_configs
 from epw import evaluate_trade_epw, compute_league_epw
 from playoffs import (
     DEFAULT_PLAYOFF_TEAMS,
-    DEFAULT_SCHEDULE_PATH,
     compute_playoff_predictions,
-    load_schedule,
 )
+from context import context_manager
 
 
 SIM_STORE = SimulationStore()
@@ -1520,16 +1519,12 @@ def render_power_rankings(teams: List[str]) -> None:
 
 
 def render_playoff_predictor(teams: List[str]) -> None:
+    ctx = context_manager.get()
+    schedule_df = ctx.schedule if not ctx.schedule.empty else None
+    schedule_label = ctx.schedule_source or "schedule.csv"
+    if schedule_df is None:
+        st.warning("Schedule data not available from ESPN; falling back to local CSV if accessible.")
     st.sidebar.subheader("Playoff simulation settings")
-
-    schedule_default = str(DEFAULT_SCHEDULE_PATH)
-    schedule_input = st.sidebar.text_input(
-        "Schedule CSV",
-        value=schedule_default,
-        help="Path to the schedule file used for simulations.",
-        key="playoff_schedule_path",
-    ).strip()
-    schedule_path = schedule_input or schedule_default
 
     max_spots = max(2, len(teams))
     playoff_spots = st.sidebar.number_input(
@@ -1575,11 +1570,11 @@ def render_playoff_predictor(teams: List[str]) -> None:
 
     stored_settings = st.session_state.get("playoff_settings")
     current_settings = {
-        "schedule_path": schedule_path,
         "playoff_spots": int(playoff_spots),
         "simulations": int(simulations),
         "seed": seed,
         "espn_scoring_period": espn_league.scoring_period_id if espn_league else None,
+        "schedule_label": schedule_label,
     }
 
     should_run = refresh or stored_settings != current_settings or "playoff_result" not in st.session_state
@@ -1592,7 +1587,8 @@ def render_playoff_predictor(teams: List[str]) -> None:
                     projections_path=str(PROJECTIONS_PATH),
                 )
                 predictions = compute_playoff_predictions(
-                    schedule_path=schedule_path,
+                    schedule_df=schedule_df,
+                    schedule_label=schedule_label,
                     rankings_path=str(RANKINGS_PATH),
                     projections_path=str(PROJECTIONS_PATH),
                     num_simulations=int(simulations),
@@ -1741,7 +1737,8 @@ def render_playoff_predictor(teams: List[str]) -> None:
                                     custom_rosters=mutated_rosters,
                                 )
                                 scenario_predictions = compute_playoff_predictions(
-                                    schedule_path=schedule_path,
+                                    schedule_df=schedule_df,
+                                    schedule_label=schedule_label,
                                     rankings_path=str(RANKINGS_PATH),
                                     projections_path=str(PROJECTIONS_PATH),
                                     num_simulations=int(simulations),
@@ -1841,12 +1838,7 @@ def render_playoff_predictor(teams: List[str]) -> None:
         standings_display["PointsAgainst"] = standings_display["PointsAgainst"].round(1)
         st.dataframe(standings_display, use_container_width=True)
 
-    try:
-        schedule_df = load_schedule(schedule_path)
-    except Exception:
-        schedule_df = None
-
-    if schedule_df is not None:
+    if schedule_df is not None and not schedule_df.empty:
         future_mask = schedule_df["AwayScore"].isna() | schedule_df["HomeScore"].isna()
         future_games = schedule_df.loc[future_mask].copy()
         if not future_games.empty:

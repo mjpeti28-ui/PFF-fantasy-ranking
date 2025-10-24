@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import httpx
+import pandas as pd
 
 
 def _load_local_env() -> None:
@@ -45,6 +46,15 @@ DEFAULT_VIEWS: Tuple[str, ...] = (
     "mSettings",
     "mMatchup",
     "mStandings",
+)
+
+DEFAULT_HISTORY_VIEWS: Tuple[str, ...] = (
+    "mTeam",
+    "mRoster",
+    "mMatchup",
+    "mMatchupScore",
+    "mStandings",
+    "mSettings",
 )
 
 POSITION_ID_MAP: Dict[int, str] = {
@@ -538,6 +548,38 @@ def fetch_rosters_from_espn() -> Tuple[Dict[str, Dict[str, List[str]]], ESPNLeag
     return rosters, league_state
 
 
+def fetch_league_payload_for_week(
+    scoring_period_id: int,
+    *,
+    views: Sequence[str] | None = None,
+) -> Dict[str, Any]:
+    client = _default_client()
+    if client is None:
+        raise RuntimeError("ESPN credentials not configured (ESPN_S2 / ESPN_SWID).")
+    if scoring_period_id < 1:
+        raise ValueError("scoring_period_id must be greater than or equal to 1")
+
+    active_views: Sequence[str] = tuple(views) if views is not None else DEFAULT_HISTORY_VIEWS
+    payload = client.fetch_endpoint(
+        view=active_views,
+        params={"scoringPeriodId": int(scoring_period_id)},
+    )
+    return payload
+
+
+def parse_league_payload(payload: Dict[str, Any]) -> ESPNLeagueData:
+    return _parse_league_payload(payload)
+
+
+def fetch_league_state_for_week(
+    scoring_period_id: int,
+    *,
+    views: Sequence[str] | None = None,
+) -> ESPNLeagueData:
+    payload = fetch_league_payload_for_week(scoring_period_id, views=views)
+    return parse_league_payload(payload)
+
+
 def get_last_league_payload() -> Optional[Dict[str, Any]]:
     return _LAST_LEAGUE_PAYLOAD
 
@@ -551,6 +593,63 @@ def fetch_player_detail(player_id: int, *, view: Optional[Sequence[str]] = None)
     if client is None:
         return None
     return client.fetch_player_detail(player_id, view=view)
+
+
+def league_schedule_to_dataframe(league: ESPNLeagueData) -> pd.DataFrame:
+    rows: List[Dict[str, Any]] = []
+    for matchup in league.schedule:
+        if matchup.home_team_id is None or matchup.away_team_id is None:
+            continue
+        home_team = league.teams.get(matchup.home_team_id)
+        away_team = league.teams.get(matchup.away_team_id)
+        if home_team is None or away_team is None:
+            continue
+        rows.append(
+            {
+                "Week": matchup.matchup_period,
+                "AwayTeam": away_team.name,
+                "AwayManagers": ", ".join(away_team.managers) if away_team.managers else "",
+                "AwayScore": matchup.away_points,
+                "HomeTeam": home_team.name,
+                "HomeManagers": ", ".join(home_team.managers) if home_team.managers else "",
+                "HomeScore": matchup.home_points,
+                "MatchupId": matchup.matchup_id,
+                "Winner": matchup.winner,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "Week",
+                "AwayTeam",
+                "AwayManagers",
+                "AwayScore",
+                "HomeTeam",
+                "HomeManagers",
+                "HomeScore",
+                "MatchupId",
+                "Winner",
+            ]
+        )
+
+    df = pd.DataFrame(rows)
+    df["Week"] = pd.to_numeric(df["Week"], errors="coerce").astype("Int64")
+    df["AwayScore"] = pd.to_numeric(df["AwayScore"], errors="coerce")
+    df["HomeScore"] = pd.to_numeric(df["HomeScore"], errors="coerce")
+    df = df.sort_values(["Week", "AwayTeam", "HomeTeam"]).reset_index(drop=True)
+    return df
+
+
+def fetch_recent_activity(limit: int = 25) -> List[Dict[str, Any]]:
+    client = _default_client()
+    if client is None:
+        return []
+    params: Dict[str, Any] = {"limit": limit}
+    payload = client.fetch_endpoint(view=["kona_league_communication"], params=params)
+    communication = payload.get("communication") or {}
+    topics = communication.get("topics") or []
+    return topics
 
 
 def convert_league_to_rosters(

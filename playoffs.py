@@ -20,7 +20,7 @@ import pandas as pd
 
 from main import DEFAULT_PROJECTIONS, DEFAULT_RANKINGS, evaluate_league
 from rosters import Fantasy_Rosters
-from espn_client import ESPNLeagueData
+from espn_client import ESPNLeagueData, league_schedule_to_dataframe
 
 DEFAULT_SCHEDULE_PATH = Path("schedule.csv")
 DEFAULT_PLAYOFF_TEAMS = 8
@@ -120,54 +120,6 @@ def load_schedule(path: str | Path = DEFAULT_SCHEDULE_PATH) -> pd.DataFrame:
     df["HomeScore"] = pd.to_numeric(df["HomeScore"], errors="coerce")
 
     # Ensure schedule is ordered by week (and fallback lexicographically for stability).
-    df = df.sort_values(["Week", "AwayTeam", "HomeTeam"]).reset_index(drop=True)
-    return df
-
-
-def espn_schedule_to_dataframe(league: ESPNLeagueData) -> pd.DataFrame:
-    """Convert an ESPN league schedule into the canonical dataframe layout."""
-
-    rows: List[Dict[str, Any]] = []
-    for matchup in league.schedule:
-        if matchup.home_team_id is None or matchup.away_team_id is None:
-            continue
-        home_team = league.teams.get(matchup.home_team_id)
-        away_team = league.teams.get(matchup.away_team_id)
-        if home_team is None or away_team is None:
-            continue
-        rows.append(
-            {
-                "Week": matchup.matchup_period,
-                "AwayTeam": away_team.name,
-                "AwayManagers": ", ".join(away_team.managers) if away_team.managers else "",
-                "AwayScore": matchup.away_points,
-                "HomeTeam": home_team.name,
-                "HomeManagers": ", ".join(home_team.managers) if home_team.managers else "",
-                "HomeScore": matchup.home_points,
-                "MatchupId": matchup.matchup_id,
-                "Winner": matchup.winner,
-            }
-        )
-
-    if not rows:
-        return pd.DataFrame(
-            columns=[
-                "Week",
-                "AwayTeam",
-                "AwayManagers",
-                "AwayScore",
-                "HomeTeam",
-                "HomeManagers",
-                "HomeScore",
-                "MatchupId",
-                "Winner",
-            ]
-        )
-
-    df = pd.DataFrame(rows)
-    df["Week"] = pd.to_numeric(df["Week"], errors="coerce").astype("Int64")
-    df["AwayScore"] = pd.to_numeric(df["AwayScore"], errors="coerce")
-    df["HomeScore"] = pd.to_numeric(df["HomeScore"], errors="coerce")
     df = df.sort_values(["Week", "AwayTeam", "HomeTeam"]).reset_index(drop=True)
     return df
 
@@ -653,7 +605,9 @@ def simulate_playoff_odds(
 
 def compute_playoff_predictions(
     *,
-    schedule_path: str | Path = DEFAULT_SCHEDULE_PATH,
+    schedule_path: str | Path | None = DEFAULT_SCHEDULE_PATH,
+    schedule_df: Optional[pd.DataFrame] = None,
+    schedule_label: Optional[str] = None,
     rankings_path: Optional[str | Path] = None,
     projections_path: Optional[str | Path] = None,
     num_simulations: int = 5000,
@@ -672,16 +626,15 @@ def compute_playoff_predictions(
     else:
         schedule_path_obj = None
 
-    use_espn_schedule = espn_league is not None and (
-        schedule_path_obj is None or schedule_path_obj == DEFAULT_SCHEDULE_PATH
-    )
-
-    if use_espn_schedule and espn_league is not None:
-        schedule = espn_schedule_to_dataframe(espn_league)
+    if schedule_df is not None:
+        schedule = schedule_df.copy()
+        schedule_source_path = schedule_label or "CUSTOM"
+    elif espn_league is not None and (schedule_path_obj is None or schedule_path_obj == DEFAULT_SCHEDULE_PATH):
+        schedule = league_schedule_to_dataframe(espn_league)
         roster_lookup_override = {
             canonical_team_id(team.name): team.slug for team in espn_league.teams.values()
         }
-        schedule_source_path = "ESPN"
+        schedule_source_path = schedule_label or "ESPN"
     else:
         resolved_path = schedule_path_obj if schedule_path_obj else DEFAULT_SCHEDULE_PATH
         schedule = load_schedule(resolved_path)

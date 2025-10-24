@@ -110,6 +110,225 @@ components:
         supplemental_path: {type: string, nullable: true}
         settings:
           $ref: '#/components/schemas/ConfigKnobs'
+        schedule_source: {type: string, nullable: true}
+    LeagueActivityMessage:
+      type: object
+      properties:
+        action: {type: string}
+        playerId: {type: integer, nullable: true}
+        playerName: {type: string, nullable: true}
+        fromTeam: {type: string, nullable: true}
+        toTeam: {type: string, nullable: true}
+        raw: {type: object}
+      required: [action, raw]
+    LeagueActivity:
+      type: object
+      properties:
+        id: {type: string}
+        type: {type: string}
+        timestamp: {type: string, nullable: true}
+        teamId: {type: integer, nullable: true}
+        team: {type: string, nullable: true}
+        summary: {type: string, nullable: true}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/LeagueActivityMessage'}
+      required: [id, type, items]
+    LeagueActivityResponse:
+      type: object
+      properties:
+        activities:
+          type: array
+          items: {$ref: '#/components/schemas/LeagueActivity'}
+      required: [activities]
+    LeagueHistoryWindow:
+      type: string
+      enum: [explicit, range, to-date, full-season]
+    HistoryWeekRange:
+      type: object
+      properties:
+        start: {type: integer}
+        end: {type: integer}
+      required: [start, end]
+    LeagueHistoryRequest:
+      type: object
+      description: Configure which weeks and data slices to include in the league history response.
+      properties:
+        window:
+          $ref: '#/components/schemas/LeagueHistoryWindow'
+        weeks:
+          type: array
+          description: Explicit list of week numbers to include. Ignored unless window is explicit.
+          items: {type: integer}
+        weekRange:
+          $ref: '#/components/schemas/HistoryWeekRange'
+        teams:
+          type: array
+          description: Optional list of team slugs, names, or IDs to include. Use "all" to include every team.
+          items: {type: string}
+        includeRosters:
+          type: boolean
+          default: true
+          description: Include weekly roster snapshots for each team.
+        includeMatchups:
+          type: boolean
+          default: true
+          description: Include matchup summaries for the requested weeks.
+        includePlayerStats:
+          type: boolean
+          default: false
+          description: Attach projected/actual stat snapshots for each rostered player.
+        includePowerRankings:
+          type: boolean
+          default: true
+          description: Re-run the evaluator for each week to capture power ranking metrics.
+    HistoryStatSnapshot:
+      type: object
+      properties:
+        statSourceId: {type: integer, nullable: true, description: 1 = actual results, 0 = projections.}
+        statSplitTypeId: {type: integer, nullable: true}
+        fantasyPoints: {type: number, format: float, nullable: true}
+        appliedStats:
+          type: object
+          additionalProperties: {type: number, format: float}
+        rawStats:
+          type: object
+          additionalProperties: {type: number, format: float}
+    HistoryPlayerStats:
+      type: object
+      properties:
+        projected: {$ref: '#/components/schemas/HistoryStatSnapshot'}
+        actual: {$ref: '#/components/schemas/HistoryStatSnapshot'}
+    HistoryEligibleSlot:
+      type: object
+      properties:
+        slotId: {type: integer, nullable: true}
+        slotName: {type: string, nullable: true}
+    HistoryPlayerSummary:
+      type: object
+      properties:
+        playerId: {type: integer, nullable: true}
+        name: {type: string, nullable: true}
+        positionId: {type: integer, nullable: true}
+        position: {type: string, nullable: true}
+        proTeamId: {type: integer, nullable: true}
+        eligibleSlots:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryEligibleSlot'}
+        lineupSlotId: {type: integer, nullable: true}
+        lineupSlot: {type: string, nullable: true}
+        injuryStatus: {type: string, nullable: true}
+        isInjured: {type: boolean}
+        onIR: {type: boolean}
+        stats: {$ref: '#/components/schemas/HistoryPlayerStats'}
+    HistoryPowerMetrics:
+      type: object
+      properties:
+        teamSlug: {type: string, nullable: true}
+        rank: {type: integer, nullable: true}
+        combinedScore: {type: number, format: float, nullable: true}
+        starterVOR: {type: number, format: float, nullable: true}
+        benchScore: {type: number, format: float, nullable: true}
+        starterProjection: {type: number, format: float, nullable: true}
+    HistoryTeamSnapshot:
+      type: object
+      properties:
+        teamId: {type: integer}
+        teamSlug: {type: string}
+        teamName: {type: string}
+        managers:
+          type: array
+          items: {type: string}
+        record: {type: object}
+        roster:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryPlayerSummary'}
+        powerMetrics:
+          $ref: '#/components/schemas/HistoryPowerMetrics'
+      required: [teamId, teamSlug, teamName]
+    HistoryMatchupSide:
+      type: object
+      properties:
+        teamId: {type: integer, nullable: true}
+        teamSlug: {type: string, nullable: true}
+        teamName: {type: string, nullable: true}
+        points: {type: number, format: float, nullable: true}
+    HistoryMatchupSummary:
+      type: object
+      properties:
+        matchupId: {type: integer, nullable: true}
+        week: {type: integer, nullable: true}
+        winner: {type: string, nullable: true}
+        isPlayoff: {type: boolean, nullable: true}
+        home: {$ref: '#/components/schemas/HistoryMatchupSide'}
+        away: {$ref: '#/components/schemas/HistoryMatchupSide'}
+      required: [home, away]
+    HistoryPowerRankingEntry:
+      type: object
+      properties:
+        teamSlug: {type: string}
+        team: {type: string}
+        rank: {type: integer}
+        combinedScore: {type: number, format: float, nullable: true}
+        starterVOR: {type: number, format: float, nullable: true}
+        benchScore: {type: number, format: float, nullable: true}
+        starterProjection: {type: number, format: float, nullable: true}
+      required: [teamSlug, team, rank]
+    HistoryWeekSnapshot:
+      type: object
+      properties:
+        week: {type: integer}
+        label: {type: string, nullable: true}
+        teams:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryTeamSnapshot'}
+        matchups:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryMatchupSummary'}
+        powerRankings:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryPowerRankingEntry'}
+      required: [week, teams]
+    HistoryLeagueInfo:
+      type: object
+      properties:
+        leagueId: {type: string, nullable: true}
+        season: {type: integer, nullable: true}
+        latestScoringPeriod: {type: integer, nullable: true}
+        currentMatchupPeriod: {type: integer, nullable: true}
+    HistoryRequestEcho:
+      type: object
+      properties:
+        window:
+          $ref: '#/components/schemas/LeagueHistoryWindow'
+        weeks:
+          type: array
+          items: {type: integer}
+        teams:
+          type: array
+          items: {type: string}
+        includeRosters: {type: boolean}
+        includeMatchups: {type: boolean}
+        includePlayerStats: {type: boolean}
+        includePowerRankings: {type: boolean}
+      required:
+        - window
+        - weeks
+        - teams
+        - includeRosters
+        - includeMatchups
+        - includePlayerStats
+        - includePowerRankings
+    LeagueHistoryResponse:
+      type: object
+      properties:
+        generatedAt: {type: string, format: date-time}
+        league: {$ref: '#/components/schemas/HistoryLeagueInfo'}
+        request: {$ref: '#/components/schemas/HistoryRequestEcho'}
+        weeks:
+          type: array
+          items: {$ref: '#/components/schemas/HistoryWeekSnapshot'}
+      required: [generatedAt, weeks]
     PlayerSummary:
       type: object
       properties:
@@ -1081,6 +1300,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LeagueMetadata'
+  /league/activity:
+    get:
+      tags: [league]
+      summary: Recent league activity
+      operationId: recentLeagueActivity
+      x-openai-isConsequential: false
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, default: 25, minimum: 1, maximum: 100}
+          description: How many recent ESPN communication topics to inspect.
+      responses:
+        '200':
+          description: Recent activity entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeagueActivityResponse'
+  /league/history:
+    post:
+      tags: [league]
+      summary: Week-by-week league history
+      operationId: leagueHistory
+      x-openai-isConsequential: false
+      requestBody:
+        required: false
+        description: Configure which weeks and assets to return.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeagueHistoryRequest'
+            example:
+              window: full-season
+              includePlayerStats: true
+              includeMatchups: true
+              includeRosters: true
+              includePowerRankings: true
+      responses:
+        '200':
+          description: History payload for the requested weeks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeagueHistoryResponse'
+        '400':
+          description: Invalid parameters.
+        '503':
+          description: ESPN league data unavailable.
   /playoffs/odds:
     get:
       tags: [playoffs]
