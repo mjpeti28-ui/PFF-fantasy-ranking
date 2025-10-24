@@ -1406,6 +1406,10 @@ paths:
           in: query
           schema: {type: boolean, default: false}
           description: Include per-team values for each snapshot.
+        - name: generateMissing
+          in: query
+          schema: {type: boolean, default: false}
+          description: Generate archived/current backfill snapshots if none exist.
         - name: limit
           in: query
           schema: {type: integer, default: 100, minimum: 1, maximum: 500}
@@ -1788,47 +1792,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TradeEvaluateResponse'
-  /trade/find:
-    post:
-      tags: [trade]
-      summary: Search for favorable trades
-      operationId: findTrades
-      description: |
-        Submit a JSON body described by `TradeFindRequest`. For quick ad-hoc usage you may also pass
-        the same fields as query parameters (teamA, teamB, maxPlayers, playerPool, topResults,
-        topBench, includeDetails, benchLimit, runAsync), but the canonical contract uses the JSON body.
-      x-openai-isConsequential: false
-      requestBody:
-        required: false
-        description: Use a JSON payload when you want to control multiple search knobs (fairness weights, narrative toggles, etc.).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TradeFindRequest'
-            example:
-              teamA: JohnBurrows_School
-              teamB: KWood_Super_Marios
-              maxPlayers: 3
-              playerPool: 24
-              topResults: 10
-              includeDetails: true
-      responses:
-        '200':
-          description: Candidate trades ordered by objective score
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TradeFindResponse'
-        '202':
-          description: Search accepted for asynchronous processing
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobCreatedResponse'
-        '400':
-          description: Invalid input (e.g., unknown team or bad knob value).
-        '422':
-          description: Validation error when the JSON body is malformed.
   /waivers/candidates:
     get:
       tags: [waivers]
@@ -2020,25 +1983,5 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlayerListResponse'
-  /jobs/{jobId}:
-    get:
-      tags: [jobs]
-      summary: Fetch background job status
-      operationId: getJob
-      x-openai-isConsequential: false
-      parameters:
-        - name: jobId
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: Job status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobInfo'
-        '404':
-          description: Job not found
 security:
   - ApiKeyAuth: []
