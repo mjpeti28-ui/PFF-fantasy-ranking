@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from api.dependencies import require_api_key
 from api.models import PowerSnapshotRecord, PowerSnapshotResponse
 from power_snapshots import iter_snapshot_records
-from history.backfill_support import ensure_backfill_snapshots
 
 router = APIRouter(prefix="/history", tags=["history"], dependencies=[Depends(require_api_key)])
 
@@ -92,23 +91,9 @@ async def list_power_ranking_snapshots(
     start_date: Optional[datetime] = Query(default=None, alias="startDate", description="Earliest snapshot timestamp (inclusive)."),
     end_date: Optional[datetime] = Query(default=None, alias="endDate", description="Latest snapshot timestamp (inclusive)."),
     include_teams: bool = Query(default=False, alias="includeTeams", description="Include team-level snapshot data."),
-    generate_missing: bool = Query(
-        default=False,
-        alias="generateMissing",
-        description="If true, generate archived/current snapshots from local history data when missing.",
-    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> PowerSnapshotResponse:
-    if generate_missing:
-        try:
-            ensure_backfill_snapshots()
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
-        except Exception:
-            # Ignore other errors, we will fall back to existing records.
-            pass
-
     try:
         records = iter_snapshot_records(include_teams=include_teams)
     except Exception as exc:  # pragma: no cover

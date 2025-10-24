@@ -1406,10 +1406,6 @@ paths:
           in: query
           schema: {type: boolean, default: false}
           description: Include per-team values for each snapshot.
-        - name: generateMissing
-          in: query
-          schema: {type: boolean, default: false}
-          description: Generate archived/current backfill snapshots if none exist.
         - name: limit
           in: query
           schema: {type: integer, default: 100, minimum: 1, maximum: 500}
