@@ -24,6 +24,11 @@ from trading import (
     PROJECTIONS_PATH,
 )
 from history_tracker import archive_if_changed
+from power_archetypes import (
+    POWER_SNAPSHOT_ARCHETYPES,
+    list_power_archetypes,
+    resolve_archetype_filters,
+)
 from power_snapshots import POWER_HISTORY_DIR
 from optimizer import flatten_league_names
 from simulation import SimulationStore, generate_random_configs
@@ -1630,6 +1635,11 @@ def render_history_explorer() -> None:
         "Historical (current rankings/projections)": {"sources": ["backfill.historical-current"], "tags": ["backfill", "current"]},
     }
 
+    archetype_entries = list_power_archetypes()
+    archetype_label_to_key = {entry.label: entry.key for entry in archetype_entries}
+    archetype_labels = ["All archetypes", *[entry.label for entry in archetype_entries]]
+    default_archetype_label = archetype_labels[0]
+
     def _default_selection(values: Optional[Sequence[str]], available: Sequence[str]) -> List[str]:
         if not available:
             return []
@@ -1642,6 +1652,8 @@ def render_history_explorer() -> None:
         st.session_state["history_applied_preset"] = None
         st.session_state["history_source_selection"] = list(available_sources)
         st.session_state["history_tag_selection"] = []
+        st.session_state["history_applied_archetype"] = default_archetype_label
+        st.session_state["history_archetype_view"] = default_archetype_label
 
     preset_label = st.selectbox("Preset view", list(preset_options.keys()), key="history_preset_view")
     preset_config = preset_options[preset_label]
@@ -1652,6 +1664,34 @@ def render_history_explorer() -> None:
         st.session_state["history_source_selection"] = desired_sources
         st.session_state["history_tag_selection"] = desired_tags
         st.session_state["history_applied_preset"] = preset_label
+        st.session_state["history_archetype_view"] = default_archetype_label
+        st.session_state["history_applied_archetype"] = default_archetype_label
+
+    archetype_label = st.selectbox(
+        "Archetype",
+        archetype_labels,
+        key="history_archetype_view",
+    )
+
+    if st.session_state.get("history_applied_archetype") != archetype_label:
+        if archetype_label == default_archetype_label:
+            archetype_sources = list(available_sources)
+            archetype_tags = []
+        else:
+            archetype_key = archetype_label_to_key.get(archetype_label)
+            raw_sources, raw_tags = resolve_archetype_filters([archetype_key] if archetype_key else [])
+            archetype_sources = [src for src in raw_sources if src in available_sources]
+            archetype_tags = [tag for tag in raw_tags if tag in tag_pool]
+        st.session_state["history_source_selection"] = archetype_sources
+        st.session_state["history_tag_selection"] = archetype_tags
+        st.session_state["history_applied_archetype"] = archetype_label
+        st.session_state["history_applied_preset"] = preset_label
+
+    if archetype_label != default_archetype_label:
+        archetype_key = archetype_label_to_key.get(archetype_label)
+        archetype_entry = POWER_SNAPSHOT_ARCHETYPES.get(archetype_key) if archetype_key else None
+        if archetype_entry and archetype_entry.description:
+            st.caption(archetype_entry.description)
 
     filters = st.columns(3)
     with filters[0]:

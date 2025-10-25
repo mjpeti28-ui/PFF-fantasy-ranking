@@ -18,17 +18,8 @@ from api.models import (
     LeagueHistoryWindow,
 )
 from context import ContextManager, LeagueDataContext
-from espn_client import fetch_recent_activity, fetch_player_detail
+from espn_client import fetch_recent_activity, lookup_player_name
 from api.history_service import collect_week_history
-
-
-def _coerce_timestamp(value):
-    if value is None:
-        return None
-    try:
-        return datetime.fromtimestamp(float(value) / 1000.0, tz=timezone.utc).isoformat()
-    except Exception:
-        return str(value)
 
 router = APIRouter(prefix="/league", tags=["league"], dependencies=[Depends(require_api_key)])
 
@@ -126,8 +117,8 @@ async def recent_activity(
     manager: ContextManager = Depends(get_context_manager),
 ) -> LeagueActivityResponse:
     ctx = manager.get()
-    topics = fetch_recent_activity(limit=limit)
-    if not topics:
+    transactions = fetch_recent_activity(limit=limit)
+    if not transactions:
         return LeagueActivityResponse(activities=[])
 
     team_lookup: Dict[int, Dict[str, str]] = {}
@@ -157,94 +148,121 @@ async def recent_activity(
         except (TypeError, ValueError):
             return None
 
+    def _format_team(team_id: Optional[int]) -> Optional[str]:
+        if team_id is None:
+            return None
+        if team_id == 0:
+            return "Free Agency"
+        return team_lookup.get(team_id, {}).get("name")
+
+    def _format_timestamp(value: Optional[int]) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            dt = datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc)
+        except (OSError, ValueError, TypeError):
+            return None
+        return dt.isoformat()
+
     def resolve_player(pid: Optional[int]) -> Dict[str, Any]:
         if pid is None:
             return {}
         if pid in player_cache:
             return player_cache[pid]
         name = player_lookup.get(pid)
-        if name is None:
-            detail = fetch_player_detail(pid, view=["playercard"])
-            if detail:
-                player_info = detail.get("player") or {}
-                name = player_info.get("fullName") or player_info.get("firstName")
+        if not name:
+            name = lookup_player_name(pid)
         player_cache[pid] = {"name": name}
         return player_cache[pid]
 
     activities: List[LeagueActivity] = []
 
-    for topic in topics[:limit]:
-        topic_type = topic.get("type") or ""
-        if not topic_type.startswith("ACTIVITY"):
+    for transaction in transactions:
+        transaction_items = transaction.get("items") or []
+        core_items = [
+            item for item in transaction_items if item.get("type") in {"ADD", "DROP", "TRADE"}
+        ]
+        if not core_items:
             continue
 
-        messages = topic.get("messages") or []
-        items: List[LeagueActivityMessage] = []
+        activity_items: List[LeagueActivityMessage] = []
         summary_parts: List[str] = []
 
-        for message in messages:
-            player_id = message.get("targetId")
-            source_team_id = _coerce_team_id(message.get("from"))
-            dest_team_id = _coerce_team_id(message.get("to"))
-
-            if source_team_id == dest_team_id:
-                action = "update"
-            elif source_team_id is None and dest_team_id is not None:
-                action = "add"
-            elif dest_team_id is None and source_team_id is not None:
-                action = "drop"
-            elif source_team_id is not None and dest_team_id is not None:
-                action = "trade"
-            else:
-                action = "transaction"
-
+        for item in core_items:
+            player_id = item.get("playerId")
             player_info = resolve_player(player_id)
-            player_name = player_info.get("name") or (str(player_id) if player_id is not None else None)
+            player_name = player_info.get("name")
+            if not player_name and isinstance(player_id, int):
+                player_name = str(player_id)
 
-            from_team_name = team_lookup.get(source_team_id, {}).get("name") if source_team_id is not None else None
-            to_team_name = team_lookup.get(dest_team_id, {}).get("name") if dest_team_id is not None else None
+            action_type = item.get("type") or ""
+            action = {
+                "ADD": "add",
+                "DROP": "drop",
+                "TRADE": "trade",
+            }.get(action_type, action_type.lower() or "transaction")
 
-            items.append(
+            from_team_id = _coerce_team_id(item.get("fromTeamId"))
+            to_team_id = _coerce_team_id(item.get("toTeamId"))
+            from_team_name = _format_team(from_team_id)
+            to_team_name = _format_team(to_team_id)
+
+            activity_items.append(
                 LeagueActivityMessage(
                     action=action,
-                    playerId=player_id,
+                    playerId=player_id if isinstance(player_id, int) else None,
                     playerName=player_name,
                     fromTeam=from_team_name,
                     toTeam=to_team_name,
-                    raw=message,
+                    raw=item,
                 )
             )
 
-            verb = {
-                "add": "added",
-                "drop": "dropped",
-                "trade": "traded",
-                "update": "updated",
-            }.get(action, "moved")
-
-            if action == "trade" and from_team_name and to_team_name:
-                summary_parts.append(f"{player_name} from {from_team_name} to {to_team_name}")
-            elif action == "add" and to_team_name:
+            if action == "trade" and player_name and from_team_name and to_team_name:
+                summary_parts.append(f"{player_name}: {from_team_name} → {to_team_name}")
+            elif action == "add" and player_name and to_team_name:
                 summary_parts.append(f"{to_team_name} added {player_name}")
-            elif action == "drop" and from_team_name:
+            elif action == "drop" and player_name and from_team_name:
                 summary_parts.append(f"{from_team_name} dropped {player_name}")
-            else:
-                summary_parts.append(f"{verb} {player_name}")
 
-        team_id = _coerce_team_id(topic.get("targetId"))
-        team_name = team_lookup.get(team_id, {}).get("name") if team_id is not None else None
+        if not activity_items:
+            continue
+
+        transaction_type = transaction.get("type") or "TRANSACTION"
+        team_id = _coerce_team_id(transaction.get("teamId"))
+        team_name = _format_team(team_id)
+        timestamp = (
+            _format_timestamp(transaction.get("proposedDate"))
+            or _format_timestamp(transaction.get("executionDate"))
+        )
+
+        if not summary_parts:
+            if transaction_type.startswith("TRADE"):
+                trade_team_ids = {
+                    _coerce_team_id(item.get("fromTeamId")) for item in core_items
+                } | {
+                    _coerce_team_id(item.get("toTeamId")) for item in core_items
+                }
+                trade_names = sorted(filter(None, {_format_team(tid) for tid in trade_team_ids}))
+                if len(trade_names) >= 2:
+                    summary_parts.append(f"Trade: {' ↔ '.join(trade_names)}")
+            if not summary_parts and team_name:
+                summary_parts.append(transaction_type.replace("_", " ").title())
 
         activities.append(
             LeagueActivity(
-                id=str(topic.get("id")),
-                type=topic_type,
-                timestamp=_coerce_timestamp(topic.get("date")),
+                id=str(transaction.get("id")),
+                type=transaction_type,
+                timestamp=timestamp,
                 teamId=team_id,
                 team=team_name,
                 summary="; ".join(summary_parts) if summary_parts else None,
-                items=items,
+                items=activity_items,
             )
         )
+
+        if len(activities) >= limit:
+            break
 
     return LeagueActivityResponse(activities=activities)
 

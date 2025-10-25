@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.dependencies import require_api_key
 from api.models import PowerSnapshotRecord, PowerSnapshotResponse
+from power_archetypes import resolve_archetype_filters
 from power_snapshots import iter_snapshot_records
 
 router = APIRouter(prefix="/history", tags=["history"], dependencies=[Depends(require_api_key)])
@@ -91,6 +92,10 @@ async def list_power_ranking_snapshots(
     start_date: Optional[datetime] = Query(default=None, alias="startDate", description="Earliest snapshot timestamp (inclusive)."),
     end_date: Optional[datetime] = Query(default=None, alias="endDate", description="Latest snapshot timestamp (inclusive)."),
     include_teams: bool = Query(default=False, alias="includeTeams", description="Include team-level snapshot data."),
+    archetypes: List[str] = Query(
+        default=[],
+        description="One or more archetype keys to expand into matching sources/tags.",
+    ),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> PowerSnapshotResponse:
@@ -98,6 +103,12 @@ async def list_power_ranking_snapshots(
         records = iter_snapshot_records(include_teams=include_teams)
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+    archetype_sources, archetype_tags = resolve_archetype_filters(archetypes)
+    if archetype_sources:
+        sources = list(dict.fromkeys([*archetype_sources, *sources]))
+    if archetype_tags:
+        tags = list(dict.fromkeys([*archetype_tags, *tags]))
 
     filtered = _filter_records(
         records,

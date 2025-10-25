@@ -8,8 +8,6 @@ info:
 servers:
   - url: https://pff-fantasy-analyzer.onrender.com
     description: Production
-  - url: http://localhost:8000
-    description: Local development
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -1406,6 +1404,14 @@ paths:
           in: query
           schema: {type: boolean, default: false}
           description: Include per-team values for each snapshot.
+        - name: archetypes
+          in: query
+          schema:
+            type: array
+            items: {type: string}
+          style: form
+          explode: true
+          description: Expand predefined archetype keys into matching sources/tags filters.
         - name: limit
           in: query
           schema: {type: integer, default: 100, minimum: 1, maximum: 500}

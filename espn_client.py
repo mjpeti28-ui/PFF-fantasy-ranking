@@ -37,6 +37,7 @@ def _load_local_env() -> None:
 _load_local_env()
 
 ESPN_FANTASY_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games"
+ESPN_CORE_BASE = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl"
 DEFAULT_SPORT_KEY = "ffl"  # NFL fantasy football
 DEFAULT_LEAGUE_ID = os.getenv("ESPN_LEAGUE_ID", "1891655995")
 DEFAULT_SEASON = 2025
@@ -645,11 +646,67 @@ def fetch_recent_activity(limit: int = 25) -> List[Dict[str, Any]]:
     client = _default_client()
     if client is None:
         return []
-    params: Dict[str, Any] = {"limit": limit}
-    payload = client.fetch_endpoint(view=["kona_league_communication"], params=params)
-    communication = payload.get("communication") or {}
-    topics = communication.get("topics") or []
-    return topics
+    limit = max(1, int(limit))
+    params: Dict[str, Any] = {"limit": min(max(limit * 3, limit), 150)}
+    payload = client.fetch_endpoint(view=["mTransactions2"], params=params)
+    transactions = payload.get("transactions") or []
+    transactions = sorted(
+        transactions,
+        key=lambda tx: tx.get("proposedDate") or tx.get("executionDate") or 0,
+        reverse=True,
+    )
+    return transactions
+
+
+_CORE_PLAYER_CACHE: Dict[int, Optional[str]] = {}
+_CORE_TEAM_CACHE: Dict[int, Optional[str]] = {}
+
+
+def _core_fetch_json(path: str) -> Optional[Dict[str, Any]]:
+    url = f"{ESPN_CORE_BASE}/{path.lstrip('/')}"
+    try:
+        response = httpx.get(url, timeout=5.0)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    try:
+        data = response.json()
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _lookup_team_name(team_id: int) -> Optional[str]:
+    if team_id in _CORE_TEAM_CACHE:
+        return _CORE_TEAM_CACHE[team_id]
+    payload = _core_fetch_json(f"teams/{team_id}")
+    name = None
+    if payload:
+        name = payload.get("displayName") or payload.get("name") or payload.get("shortDisplayName")
+    _CORE_TEAM_CACHE[team_id] = name
+    return name
+
+
+def lookup_player_name(player_id: Optional[int]) -> Optional[str]:
+    if player_id is None:
+        return None
+    if player_id in _CORE_PLAYER_CACHE:
+        return _CORE_PLAYER_CACHE[player_id]
+
+    name: Optional[str] = None
+    if player_id < 0:
+        numeric = abs(player_id) - 16000
+        if numeric > 0:
+            team_name = _lookup_team_name(numeric)
+            if team_name:
+                name = f"{team_name} D/ST"
+    else:
+        payload = _core_fetch_json(f"athletes/{player_id}")
+        if payload:
+            name = payload.get("displayName") or payload.get("fullName") or payload.get("shortName")
+
+    _CORE_PLAYER_CACHE[player_id] = name
+    return name
 
 
 def convert_league_to_rosters(
