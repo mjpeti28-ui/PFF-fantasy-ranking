@@ -1612,6 +1612,9 @@ def render_power_rankings(teams: List[str]) -> None:
 
 def render_history_explorer() -> None:
     snapshots_df, teams_df = load_power_history_tables()
+    if st.button("Refresh snapshot cache", type="secondary", help="Reload history files from disk, clearing the cached tables."):
+        load_power_history_tables.clear()
+        snapshots_df, teams_df = load_power_history_tables()
     if snapshots_df.empty:
         st.info("No power-ranking snapshots have been saved yet. Run a league evaluation to populate history.")
         return

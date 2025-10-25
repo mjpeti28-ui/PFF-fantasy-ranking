@@ -1,0 +1,150 @@
+{
+  "createdAt": "2025-10-24T23:44:02.080851+00:00",
+  "source": "archetype.projection-sprint",
+  "week": 5,
+  "tags": [
+    "archetype:projection_sprint",
+    "mode:historical",
+    "week:5",
+    "source:archetype.projection-sprint",
+    "rankings:ROS_week_2_PFF_rankings.csv",
+    "projections:projections.csv",
+    "supplemental:PFF_rankings.csv",
+    "bench_ovar_beta:0.25",
+    "bench_percentile_clamp:0.05",
+    "bench_z_fallback_threshold:3",
+    "combined_bench_weight:0.1",
+    "combined_starters_weight:0.9",
+    "projection_scale_beta:0.9",
+    "replacement_skip_pct:0.05",
+    "replacement_window:3",
+    "scarcity_method:monotone_cubic",
+    "scarcity_positions:['QB', 'RB', 'TE', 'WR']",
+    "scarcity_sample_step:0.5"
+  ],
+  "rankingsPath": "/Users/maxpetite/Desktop/personal projects/PFF-fantasy-ranking/ROS_week_2_PFF_rankings.csv",
+  "projectionsPath": "projections.csv",
+  "supplementalPath": "/Users/maxpetite/Desktop/personal projects/PFF-fantasy-ranking/PFF_rankings.csv",
+  "settings": {
+    "projection_scale_beta": 0.9,
+    "replacement_skip_pct": 0.05,
+    "replacement_window": 3,
+    "bench_ovar_beta": 0.25,
+    "combined_starters_weight": 0.9,
+    "combined_bench_weight": 0.1,
+    "bench_z_fallback_threshold": 3.0,
+    "bench_percentile_clamp": 0.05,
+    "scarcity_method": "monotone_cubic",
+    "scarcity_positions": [
+      "QB",
+      "RB",
+      "TE",
+      "WR"
+    ],
+    "scarcity_sample_step": 0.5
+  },
+  "teams": [
+    {
+      "rank": 1,
+      "team": "John_Burrows_School",
+      "combinedScore": 1.163,
+      "starterVOR": 301.28,
+      "benchScore": 152.83,
+      "starterProjection": 1087.3
+    },
+    {
+      "rank": 2,
+      "team": "Hines_Ward_Jersey",
+      "combinedScore": 0.848,
+      "starterVOR": 269.88,
+      "benchScore": 274.54,
+      "starterProjection": 1055.9
+    },
+    {
+      "rank": 3,
+      "team": "Kirkwood_Kittens",
+      "combinedScore": 0.761,
+      "starterVOR": 282.06,
+      "benchScore": 95.0,
+      "starterProjection": 1086.7
+    },
+    {
+      "rank": 4,
+      "team": "The_Lords_Force",
+      "combinedScore": 0.709,
+      "starterVOR": 267.08,
+      "benchScore": 215.29,
+      "starterProjection": 1053.1
+    },
+    {
+      "rank": 5,
+      "team": "Righteous_Gemstones",
+      "combinedScore": 0.604,
+      "starterVOR": 262.96,
+      "benchScore": 190.54,
+      "starterProjection": 1067.6
+    },
+    {
+      "rank": 6,
+      "team": "Dobis_P_R",
+      "combinedScore": 0.604,
+      "starterVOR": 262.86,
+      "benchScore": 192.03,
+      "starterProjection": 1067.5
+    },
+    {
+      "rank": 7,
+      "team": "The_Little_Stinkers",
+      "combinedScore": 0.047,
+      "starterVOR": 222.93,
+      "benchScore": 247.28,
+      "starterProjection": 1046.2
+    },
+    {
+      "rank": 8,
+      "team": "Blue_Streak_Bombers",
+      "combinedScore": 0.033,
+      "starterVOR": 234.28,
+      "benchScore": 122.58,
+      "starterProjection": 1020.3
+    },
+    {
+      "rank": 9,
+      "team": "K_Wood_Super_Marios",
+      "combinedScore": -0.526,
+      "starterVOR": 201.46,
+      "benchScore": 104.43,
+      "starterProjection": 1006.1
+    },
+    {
+      "rank": 10,
+      "team": "Kansas_City_Carnevores",
+      "combinedScore": -1.018,
+      "starterVOR": 172.98,
+      "benchScore": 84.48,
+      "starterProjection": 959.0
+    },
+    {
+      "rank": 11,
+      "team": "Braeside_Bangers",
+      "combinedScore": -1.075,
+      "starterVOR": 164.83,
+      "benchScore": 131.73,
+      "starterProjection": 969.47
+    },
+    {
+      "rank": 12,
+      "team": "Live_Laugh_Love",
+      "combinedScore": -2.151,
+      "starterVOR": 103.68,
+      "benchScore": 75.75,
+      "starterProjection": 902.8
+    }
+  ],
+  "meta": {
+    "contextCreatedAt": "2025-10-24T23:43:57.182585+00:00",
+    "leagueId": "1891655995",
+    "season": 2025,
+    "mode": "historical"
+  }
+}
