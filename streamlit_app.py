@@ -1,6 +1,7 @@
 import copy
 import importlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -430,6 +431,126 @@ def summary_table(
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values("Combined Score", ascending=False)
+    return df
+
+
+def _sanitize_label(label: Any) -> str:
+    text = str(label) if label is not None else ""
+    cleaned = re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_")
+    return cleaned or "value"
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _zero_sum_entries_to_map(group: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    mapping: Dict[str, Dict[str, float]] = {}
+    if not isinstance(group, dict):
+        return mapping
+    for entry in group.get("entries", []) or []:
+        team = entry.get("team")
+        if not team:
+            continue
+        mapping[team] = {
+            "value": _safe_float(entry.get("value")),
+            "share": _safe_float(entry.get("share")),
+            "surplus": _safe_float(entry.get("surplus")),
+        }
+    return mapping
+
+
+def _zero_sum_nested_maps(section: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, float]]]:
+    nested: Dict[str, Dict[str, Dict[str, float]]] = {}
+    if not isinstance(section, dict):
+        return nested
+    for label, group in section.items():
+        nested[label] = _zero_sum_entries_to_map(group)
+    return nested
+
+
+def build_league_breakdown_dataframe(league: Dict[str, Any]) -> pd.DataFrame:
+    combined_scores = league.get("combined_scores", {})
+    starters_totals = league.get("starters_totals", {})
+    starter_projections = league.get("starter_projections", {})
+    bench_totals = league.get("bench_totals", {})
+    zero_sum = league.get("zero_sum", {}) or {}
+
+    combined_map = _zero_sum_entries_to_map(zero_sum.get("combined"))
+    starters_map = _zero_sum_entries_to_map(zero_sum.get("starters"))
+    bench_map = _zero_sum_entries_to_map(zero_sum.get("bench"))
+    flex_map = _zero_sum_entries_to_map(zero_sum.get("flex"))
+
+    positions_map = _zero_sum_nested_maps(zero_sum.get("positions"))
+    bench_positions_map = _zero_sum_nested_maps(zero_sum.get("benchPositions"))
+    slots_map = _zero_sum_nested_maps(zero_sum.get("slots"))
+
+    position_labels = sorted(positions_map.keys())
+    bench_position_labels = sorted(bench_positions_map.keys())
+    slot_labels = sorted(slots_map.keys())
+
+    analytics = zero_sum.get("analytics", {}) if isinstance(zero_sum, dict) else {}
+    team_analytics = analytics.get("teams", {}) if isinstance(analytics, dict) else {}
+
+    rows: List[Dict[str, Any]] = []
+    for team in sorted(combined_scores.keys()):
+        row: Dict[str, Any] = {
+            "Team": team,
+            "Starter VOR": round(_safe_float(starters_totals.get(team)), 2),
+            "Starter Projection": round(_safe_float(starter_projections.get(team)), 2),
+            "Bench Score": round(_safe_float(bench_totals.get(team)), 2),
+            "Combined Score": round(_safe_float(combined_scores.get(team)), 3),
+        }
+
+        for label, mapping in [
+            ("Combined", combined_map),
+            ("Starters", starters_map),
+            ("Bench", bench_map),
+            ("Flex", flex_map),
+        ]:
+            metrics = mapping.get(team, {})
+            row[f"ZeroSum_{label}_Value"] = round(_safe_float(metrics.get("value")), 2)
+            row[f"ZeroSum_{label}_SharePct"] = round(_safe_float(metrics.get("share")) * 100.0, 2)
+            row[f"ZeroSum_{label}_Surplus"] = round(_safe_float(metrics.get("surplus")), 2)
+
+        for label, mapping in [("Position", positions_map), ("BenchPos", bench_positions_map), ("Slot", slots_map)]:
+            labels = position_labels if label == "Position" else bench_position_labels if label == "BenchPos" else slot_labels
+            current_map = mapping
+            for raw_key in labels:
+                sanitized = _sanitize_label(raw_key)
+                metrics = current_map.get(raw_key, {}).get(team, {})
+                row[f"ZeroSum_{label}_{sanitized}_Value"] = round(_safe_float(metrics.get("value")), 2)
+                row[f"ZeroSum_{label}_{sanitized}_SharePct"] = round(_safe_float(metrics.get("share")) * 100.0, 2)
+                row[f"ZeroSum_{label}_{sanitized}_Surplus"] = round(_safe_float(metrics.get("surplus")), 2)
+
+        analytics_payload = team_analytics.get(team, {}) if isinstance(team_analytics, dict) else {}
+        scarcity = analytics_payload.get("scarcityPressure", {}) if isinstance(analytics_payload, dict) else {}
+        for pos, metrics in scarcity.items():
+            sanitized = _sanitize_label(pos)
+            row[f"ScarcityPressure_{sanitized}_Deficit"] = round(_safe_float(metrics.get("deficit")), 4)
+            row[f"ScarcityPressure_{sanitized}_Pressure"] = round(_safe_float(metrics.get("pressure")), 4)
+
+        concentration = analytics_payload.get("concentrationRisk", {}) if isinstance(analytics_payload, dict) else {}
+        if isinstance(concentration, dict):
+            for key, value in concentration.items():
+                if isinstance(value, dict):
+                    for sub_key, sub_value in value.items():
+                        sanitized_sub = _sanitize_label(f"{key}_{sub_key}")
+                        row[f"Concentration_{sanitized_sub}"] = round(_safe_float(sub_value), 4)
+                else:
+                    sanitized_key = _sanitize_label(key)
+                    row[f"Concentration_{sanitized_key}"] = round(_safe_float(value), 4)
+
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values("Combined Score", ascending=False).reset_index(drop=True)
     return df
 
 
@@ -1317,6 +1438,17 @@ def render_power_rankings(teams: List[str]) -> None:
         league["combined_scores"],
     )
     st.dataframe(summary_df)
+
+    breakdown_df = build_league_breakdown_dataframe(league)
+    if not breakdown_df.empty:
+        csv_bytes = breakdown_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "Download comprehensive league breakdown (CSV)",
+            data=csv_bytes,
+            file_name="pff_league_breakdown.csv",
+            mime="text/csv",
+            help="Exports combined scores, starter/bench metrics, zero-sum ledgers, and scarcity analytics for every team.",
+        )
 
     zero_sum = league.get("zero_sum", {})
     combined_group = zero_sum.get("combined") if isinstance(zero_sum, dict) else None
