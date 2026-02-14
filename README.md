@@ -11,13 +11,18 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 ## Quick Start
 1. **Python environment**: Python 3.11+ recommended. Install dependencies:
    ```bash
-   python -m venv .venv
+   python3 -m venv .venv
    source .venv/bin/activate
-   pip install pandas numpy scipy openpyxl streamlit altair
+   pip install -r requirements.txt
+   pip install streamlit altair openpyxl
+   ```
+   Optional dev/test tooling:
+   ```bash
+   pip install -r requirements-dev.txt
    ```
 2. **CLI report**: Generate the league digest with the bundled sample data.
    ```bash
-   python main.py --projections projections.csv
+   python3 main.py --projections projections.csv
    ```
    Common flags:
    - `--top-bench 15` to show more bench players per team.
@@ -26,13 +31,18 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
    ```bash
    streamlit run streamlit_app.py
    ```
-4. **Excel output (optional)**: Use `reports.py` to export the tables produced by `evaluate_league` into an Excel workbook with methodology notes.
+4. **FastAPI server**: Run the API locally and inspect interactive docs:
+   ```bash
+   uvicorn api.main:app --reload --reload-exclude '.venv/*'
+   ```
+   Then open `http://127.0.0.1:8000/docs`.
+5. **Excel output (optional)**: Use `reports.py` to export the tables produced by `evaluate_league` into an Excel workbook with methodology notes.
 
 ## FastAPI API Highlights
 - **Ownership-aware comparisons**: `POST /players/compare` aggregates rankings, projections, stats, alias matches, and roster ownership (team/slot/free-agent) for any list of players—ideal for head-to-head breakdowns or waiver triage.
-- **Asynchronous trade search**: `POST /trade/find` automatically falls back to background jobs for large search spaces; poll `GET /jobs/{jobId}` to retrieve results when `202 Accepted` is returned. Synchronous calls remain available for lightweight scenarios.
+- **Asynchronous trade search**: `POST /trade/find` automatically falls back to background jobs for large search spaces; poll `GET /jobs/{job_id}` to retrieve results when `202 Accepted` is returned. Synchronous calls remain available for lightweight scenarios.
 - **Player & roster discovery**: `/players`, `/rankings`, `/teams/{team}`, `/waivers/*`, `/stats/{dataset}`, and `/sources/*` expose the entire evaluation context for GPT or external clients.
-- **Guardrails & documentation**: The OpenAPI spec (`openapi.yaml`) lists every knob and parameter, while `GPT_instructions.txt` supplies an opinionated playbook for automated agents (authentication, recommended workflows, narrative templates, error handling).
+- **Guardrails & documentation**: Interactive docs at `http://127.0.0.1:8000/docs` are generated directly from the running FastAPI app and are the source of truth for live route schemas. The checked-in `openapi.yaml` is a curated companion spec for external tooling.
 
 ## Data Inputs and Saved Artifacts
 - `ROS_week_2_PFF_rankings.csv`, `PFF_rankings.csv`: Baseline and supplemental PFF rankings (combined during ingest).
@@ -94,10 +104,14 @@ This repository evaluates custom fantasy football leagues on top of publicly ava
 - **Trade Analyzer**: Manually select players from two teams and simulate post-trade combined scores and EPW trajectories.
 
 ## REST API Endpoints
-The FastAPI layer (`api/`) currently exposes:
+The FastAPI layer (`api/`) currently exposes these major endpoints:
 - `GET /healthz` – basic health check.
 - `GET /config`, `PATCH /config`, `GET /config/help` – inspect, tweak, and describe runtime knobs.
 - `GET /league`, `POST /league/reload` – metadata and data refresh.
+- `GET /league/activity` – recent league transactions (when ESPN data is available).
+- `POST /league/history` – week-by-week league history snapshots.
+- `GET /history/power-rankings` – query archived power-ranking snapshots.
+- `GET /playoffs/odds`, `POST /playoffs/trade` – playoff simulations for baseline and trade scenarios.
 - `GET /players`, `GET /players/{player_id}` – search or inspect individual players.
 - `GET /rankings` – top-N lists by any metric.
 - `POST /evaluate` – run the full league evaluation (optionally returning starter/bench details) and receive the zero-sum ledger alongside classic leaderboards.
@@ -109,6 +123,7 @@ The FastAPI layer (`api/`) currently exposes:
 - `GET /sources/projections`, `GET /sources/rankings` – access upstream CSV feeds with arbitrary filtering/sorting.
 - `POST /trade/evaluate` – score a specific trade proposal.
 - `POST /trade/find` – search for favorable packages between two teams.
+- `GET /jobs/{job_id}` – poll async trade-search jobs when `/trade/find` returns `202 Accepted`.
 - `GET /waivers/candidates` – list free-agent targets with projection/VOR heuristics.
 - `POST /waivers/recommend` – evaluate add/drop scenarios and show team deltas.
 
@@ -162,16 +177,16 @@ Spin up the server with `uvicorn api.main:app --reload --reload-exclude '.venv/*
 ```
 
 ## Testing and Validation Tips
-- Run `python main.py` after any scoring tweak to make sure starter/bench leaderboards remain sensible.
+- Run `python3 main.py` after any scoring tweak to make sure starter/bench leaderboards remain sensible.
 - When altering projections or rankings, confirm `history/manifest.json` updates (indicating a new snapshot was archived).
 - Use the Streamlit "Simulation Playground" to sanity-check the sensitivity of combined scores to new heuristics before shipping them.
 - For trade logic changes, re-run the Streamlit Trade Finder against known scenarios and verify acceptance scores and narratives are aligned with expectations.
-- Install dev dependencies with `pip install -r requirements-dev.txt`, then run `pytest` (or `python -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These validate `/players`, `/rankings`, `/evaluate`, `/trade/evaluate`, `/trade/find`, `/waivers/candidates`, `/waivers/recommend`, `/teams`, `/stats/{dataset}`, `/sources/*`, and `/top/players` without requiring a live Uvicorn server.
+- Install runtime + dev dependencies (`pip install -r requirements.txt && pip install -r requirements-dev.txt`), then run `pytest` (or `python3 -m pytest`) to exercise the FastAPI endpoints via the in-process tests in `tests/`. These cover `/history/power-rankings`, `/league/history`, `/players`, `/rankings`, `/evaluate`, `/evaluate/delta`, `/trade/evaluate`, `/trade/find`, `/waivers/*`, `/teams`, `/teams/{team}/leverage`, `/zero-sum/positions`, `/stats/{dataset}`, `/sources/*`, and `/top/players` without requiring a live Uvicorn server.
 
 ## Deployment Notes
 - Runtime dependencies live in `requirements.txt`; install them with `pip install -r requirements.txt` before starting Uvicorn.
 - Set environment variables on your host:
-  - `PFF_API_KEY` (required for authenticated access; clients send it as `X-API-Key`).
+  - `PFF_API_KEY` (optional but recommended; when set, clients must send it as `X-API-Key`).
   - `RANKINGS_CSV`, `PROJECTIONS_CSV`, `SUPPLEMENTAL_RANKINGS_CSV` (optional overrides for the bundled CSVs).
 - Launch with `uvicorn api.main:app --host 0.0.0.0 --port 8000` (Render/Heroku friendly).
 - After updating data files in Git, call `POST /league/reload` to refresh the in-memory context for the running service.

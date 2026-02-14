@@ -559,7 +559,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--all-teams",
         action="store_true",
-        default=True,
+        default=False,
         help="Show starters/bench details for every team instead of just the top five.",
     )
 
