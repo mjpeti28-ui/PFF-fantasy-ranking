@@ -1,0 +1,142 @@
+{
+  "createdAt": "2025-11-06T01:12:33.929816+00:00",
+  "source": "streamlit.app",
+  "week": null,
+  "tags": [
+    "streamlit",
+    "source:streamlit.app",
+    "rankings:ROS_week_2_PFF_rankings.csv",
+    "projections:projections.csv",
+    "supplemental:PFF_rankings.csv",
+    "bench_ovar_beta:0.25",
+    "bench_percentile_clamp:0.05",
+    "bench_z_fallback_threshold:3",
+    "combined_bench_weight:0.2",
+    "combined_starters_weight:0.8",
+    "projection_scale_beta:0.5",
+    "replacement_skip_pct:0.1",
+    "replacement_window:3",
+    "scarcity_method:monotone_cubic",
+    "scarcity_positions:['QB', 'RB', 'TE', 'WR']",
+    "scarcity_sample_step:0.5"
+  ],
+  "rankingsPath": "/Users/maxpetite/Desktop/personal projects/PFF-fantasy-ranking/ROS_week_2_PFF_rankings.csv",
+  "projectionsPath": "/Users/maxpetite/Desktop/personal projects/PFF-fantasy-ranking/projections.csv",
+  "supplementalPath": "/Users/maxpetite/Desktop/personal projects/PFF-fantasy-ranking/PFF_rankings.csv",
+  "settings": {
+    "projection_scale_beta": 0.5,
+    "replacement_skip_pct": 0.1,
+    "replacement_window": 3,
+    "bench_ovar_beta": 0.25,
+    "combined_starters_weight": 0.8,
+    "combined_bench_weight": 0.2,
+    "bench_z_fallback_threshold": 3.0,
+    "bench_percentile_clamp": 0.05,
+    "scarcity_method": "monotone_cubic",
+    "scarcity_positions": [
+      "QB",
+      "RB",
+      "TE",
+      "WR"
+    ],
+    "scarcity_sample_step": 0.5
+  },
+  "teams": [
+    {
+      "rank": 1,
+      "team": "John_Burrows_School",
+      "combinedScore": 1.196,
+      "starterVOR": 717.09,
+      "benchScore": 206.17,
+      "starterProjection": 1922.0
+    },
+    {
+      "rank": 2,
+      "team": "Dobis_P_R",
+      "combinedScore": 0.901,
+      "starterVOR": 639.88,
+      "benchScore": 279.55,
+      "starterProjection": 1872.9
+    },
+    {
+      "rank": 3,
+      "team": "The_Little_Stinkers",
+      "combinedScore": 0.79,
+      "starterVOR": 662.08,
+      "benchScore": 185.29,
+      "starterProjection": 1895.1
+    },
+    {
+      "rank": 4,
+      "team": "The_Lords_Force",
+      "combinedScore": 0.768,
+      "starterVOR": 606.09,
+      "benchScore": 310.29,
+      "starterProjection": 1811.0
+    },
+    {
+      "rank": 5,
+      "team": "Hines_Ward_Jersey",
+      "combinedScore": 0.725,
+      "starterVOR": 583.79,
+      "benchScore": 347.17,
+      "starterProjection": 1788.7
+    },
+    {
+      "rank": 6,
+      "team": "K_Wood_Super_Marios",
+      "combinedScore": 0.063,
+      "starterVOR": 536.68,
+      "benchScore": 211.2,
+      "starterProjection": 1769.7
+    },
+    {
+      "rank": 7,
+      "team": "Kirkwood_Kittens",
+      "combinedScore": -0.071,
+      "starterVOR": 543.08,
+      "benchScore": 145.78,
+      "starterProjection": 1776.1
+    },
+    {
+      "rank": 8,
+      "team": "Righteous_Gemstones",
+      "combinedScore": -0.129,
+      "starterVOR": 528.58,
+      "benchScore": 158.53,
+      "starterProjection": 1761.6
+    },
+    {
+      "rank": 9,
+      "team": "Braeside_Bangers",
+      "combinedScore": -0.396,
+      "starterVOR": 491.37,
+      "benchScore": 147.12,
+      "starterProjection": 1752.5
+    },
+    {
+      "rank": 10,
+      "team": "Kansas_City_Carnevores",
+      "combinedScore": -0.793,
+      "starterVOR": 444.76,
+      "benchScore": 109.5,
+      "starterProjection": 1625.8
+    },
+    {
+      "rank": 11,
+      "team": "Blue_Streak_Bombers",
+      "combinedScore": -0.843,
+      "starterVOR": 429.39,
+      "benchScore": 127.27,
+      "starterProjection": 1634.3
+    },
+    {
+      "rank": 12,
+      "team": "Live_Laugh_Love",
+      "combinedScore": -2.209,
+      "starterVOR": 217.07,
+      "benchScore": 121.29,
+      "starterProjection": 1478.2
+    }
+  ]
+}
